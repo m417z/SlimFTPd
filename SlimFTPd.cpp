@@ -95,7 +95,7 @@ bool CanUserLogin(const wchar_t *pszUser, IN_ADDR iaPeer);
 HINSTANCE hInst;
 SERVICE_STATUS_HANDLE hServiceStatus;
 SERVICE_STATUS ServiceStatus;
-bool isWinNT, isService;
+bool isService;
 DWORD dwMaxConnections = 20, dwCommandTimeout = 300, dwConnectTimeout = 15;
 bool bLookupHosts = true;
 DWORD dwActiveConnections = 0;
@@ -105,35 +105,19 @@ UserDB *pUsers;
 SyncLogger *pLog;
 // }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pszCmdLine, int nShowCmd)
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR pszCmdLine, int nShowCmd)
 {
-	OSVERSIONINFO ovi;
 	SERVICE_TABLE_ENTRY ste[]={ { L"SlimFTPd", (LPSERVICE_MAIN_FUNCTION)ServiceMain }, { 0, 0 } };
-	HMODULE hKernel32;
-	FARPROC RegisterServiceProcess;
 	MSG msg;
 
 	hInst = GetModuleHandle(0);
 
-	// Check if Windows NT
-	ovi.dwOSVersionInfoSize=sizeof(OSVERSIONINFO);
-	GetVersionEx(&ovi);
-	isWinNT = (ovi.dwPlatformId == VER_PLATFORM_WIN32_NT);
-
 	// Are we starting as a service?
-	if (wcsstr(GetCommandLine(), L"-service") != 0) {
-		if (isWinNT) {
-			isService = true;
-			StartServiceCtrlDispatcher(ste);
-			Cleanup();
-			return 0;
-		} else {
-			isService = false;
-			hKernel32=LoadLibrary(L"KERNEL32.DLL");
-			RegisterServiceProcess=GetProcAddress(hKernel32,"RegisterServiceProcess");
-			((DWORD (__stdcall *)(DWORD, DWORD))RegisterServiceProcess)(0,1);
-			FreeLibrary(hKernel32);
-		}
+	if (wcsstr(pszCmdLine, L"-service") != 0) {
+		isService = true;
+		StartServiceCtrlDispatcher(ste);
+		Cleanup();
+		return 0;
 	} else {
 		isService = false;
 	}
