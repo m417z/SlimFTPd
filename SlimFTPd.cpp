@@ -207,7 +207,7 @@ bool Startup()
 	saiListen.sin_port=htons(21);
 
 	// Start Winsock
-	WSAStartup(MAKEWORD(1,1),&wsad);
+	WSAStartup(MAKEWORD(2,2),&wsad);
 
 	// Exec config script
 	if (!ConfParseScript(szConfFile)) return false;
