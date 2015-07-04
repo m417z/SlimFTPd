@@ -42,9 +42,9 @@ private:
 	static DWORD WINAPI SyncLoggerThread(SyncLogger *pthis);
 
 public:
-	SyncLogger(const char *pszFilename);
+	SyncLogger(const wchar_t *pszFilename);
 	~SyncLogger();
-	void Log(const char *pszText);
+	void Log(const wchar_t *pszText);
 };
 
 #endif

@@ -31,7 +31,7 @@
 
 #include "tree.cpp"
 
-bool UserDB::Add(const char *pszUsername)
+bool UserDB::Add(const wchar_t *pszUsername)
 {
 	if (_users.find(pszUsername) == _users.end()) {
 		_users.insert(std::make_pair(pszUsername, USERDBRECORD()));
@@ -41,7 +41,7 @@ bool UserDB::Add(const char *pszUsername)
 	}
 }
 
-bool UserDB::SetPassword(const char *pszUsername, const char *pszPassword)
+bool UserDB::SetPassword(const wchar_t *pszUsername, const wchar_t *pszPassword)
 {
 	map_type::iterator it = _users.find(pszUsername);
 	if (it != _users.end()) {
@@ -51,7 +51,7 @@ bool UserDB::SetPassword(const char *pszUsername, const char *pszPassword)
 	return false;
 }
 
-VFS * UserDB::GetVFS(const char *pszUsername)
+VFS * UserDB::GetVFS(const wchar_t *pszUsername)
 {
 	map_type::iterator it = _users.find(pszUsername);
 	if (it != _users.end()) {
@@ -60,7 +60,7 @@ VFS * UserDB::GetVFS(const char *pszUsername)
 	return NULL;
 }
 
-PermDB * UserDB::GetPermDB(const char *pszUsername)
+PermDB * UserDB::GetPermDB(const wchar_t *pszUsername)
 {
 	map_type::iterator it = _users.find(pszUsername);
 	if (it != _users.end()) {
@@ -69,7 +69,7 @@ PermDB * UserDB::GetPermDB(const char *pszUsername)
 	return NULL;
 }
 
-bool UserDB::CheckPassword(const char *pszUsername, const char *pszPassword)
+bool UserDB::CheckPassword(const wchar_t *pszUsername, const wchar_t *pszPassword)
 {
 	map_type::iterator it = _users.find(pszUsername);
 	return (it != _users.end()) && (it->second.strPassword == pszPassword);

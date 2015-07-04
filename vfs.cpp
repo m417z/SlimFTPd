@@ -37,22 +37,22 @@ VFS::VFS()
 {
 }
 
-void VFS::Mount(const char *pszVirtual, const char *pszLocal)
+void VFS::Mount(const wchar_t *pszVirtual, const wchar_t *pszLocal)
 // Creates a new mount point in the virtual file system.
 {
 	tree<MOUNTPOINT> *ptree, *pparent;
 
 	ptree = &_root;
 	size_t i = 0;
-	string dir;
+	wstring dir;
 	while (pszVirtual[i] != 0) {
 		++i;
 		if (pszVirtual[i] == 0) break;
-		size_t j = strcspn(pszVirtual + i, "/");
+		size_t j = wcscspn(pszVirtual + i, L"/");
 		dir.assign(pszVirtual + i, j);
 		pparent = ptree;
 		ptree = ptree->_pdown;
-		while (ptree && _stricmp(ptree->_data.strVirtual.c_str(), dir.c_str())) ptree = ptree->_pright;
+		while (ptree && _wcsicmp(ptree->_data.strVirtual.c_str(), dir.c_str())) ptree = ptree->_pright;
 		if (!ptree) {
 			ptree = new tree<MOUNTPOINT>(pparent);
 			ptree->_data.strVirtual = dir;
@@ -62,19 +62,19 @@ void VFS::Mount(const char *pszVirtual, const char *pszLocal)
 	ptree->_data.strLocal = pszLocal;
 }
 
-DWORD VFS::GetDirectoryListing(const char *pszVirtual, DWORD dwIsNLST, listing_type &listing)
+DWORD VFS::GetDirectoryListing(const wchar_t *pszVirtual, DWORD dwIsNLST, listing_type &listing)
 // Fills a map class with lines comprising an FTP-style directory listing.
 // If dwIsNLST is non-zero, will return filenames only.
 {
-	char szLine[512];
-	const char *pszMonthAbbr[]={"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+	wchar_t szLine[512];
+	const wchar_t *pszMonthAbbr[]={L"Jan",L"Feb",L"Mar",L"Apr",L"May",L"Jun",L"Jul",L"Aug",L"Sep",L"Oct",L"Nov",L"Dec"};
 	LPVOID hFind;
 	WIN32_FIND_DATA w32fd;
 	SYSTEMTIME stCutoff, stFile;
 
 	if (IsFolder(pszVirtual)) {
-		string str;
-		ResolveRelative(pszVirtual, "*", str);
+		wstring str;
+		ResolveRelative(pszVirtual, L"*", str);
 		hFind = FindFirstFile(str.c_str(), &w32fd);
 	}
 	else {
@@ -84,23 +84,23 @@ DWORD VFS::GetDirectoryListing(const char *pszVirtual, DWORD dwIsNLST, listing_t
 		GetSystemTime(&stCutoff);
 		stCutoff.wYear--;
 		do {
-			if (!strcmp(w32fd.cFileName, ".") || !strcmp(w32fd.cFileName, "..")) continue;
+			if (!wcscmp(w32fd.cFileName, L".") || !wcscmp(w32fd.cFileName, L"..")) continue;
 			FileTimeToSystemTime(&w32fd.ftLastWriteTime, &stFile);
 			if (dwIsNLST) {
-				strcpy_s(szLine, w32fd.cFileName);
+				wcscpy_s(szLine, w32fd.cFileName);
 				if (w32fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-					strcat_s(szLine, "/");
+					wcscat_s(szLine, L"/");
 				}
 			} else {
-				wsprintf(szLine, "%c--------- 1 ftp ftp %10u %s %2u ", (w32fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? 'd' : '-', w32fd.nFileSizeLow, pszMonthAbbr[stFile.wMonth-1], stFile.wDay);
+				wsprintf(szLine, L"%c--------- 1 ftp ftp %10u %s %2u ", (w32fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? L'd' : L'-', w32fd.nFileSizeLow, pszMonthAbbr[stFile.wMonth-1], stFile.wDay);
 				if ((stFile.wYear > stCutoff.wYear) || ((stFile.wYear == stCutoff.wYear) && ((stFile.wMonth > stCutoff.wMonth) || ((stFile.wMonth == stCutoff.wMonth) && (stFile.wDay > stCutoff.wDay))))) {
-					wsprintf(szLine + strlen(szLine), "%.2u:%.2u ", stFile.wHour, stFile.wMinute);
+					wsprintf(szLine + wcslen(szLine), L"%.2u:%.2u ", stFile.wHour, stFile.wMinute);
 				} else {
-					wsprintf(szLine + strlen(szLine), "%5u ", stFile.wYear);
+					wsprintf(szLine + wcslen(szLine), L"%5u ", stFile.wYear);
 				}
-				strcat_s(szLine, w32fd.cFileName);
+				wcscat_s(szLine, w32fd.cFileName);
 			}
-			strcat_s(szLine,"\r\n");
+			wcscat_s(szLine,L"\r\n");
 			listing_type::iterator it = listing.find(w32fd.cFileName);
 			if (it != listing.end()) {
 				it->second = szLine;
@@ -116,24 +116,24 @@ DWORD VFS::GetDirectoryListing(const char *pszVirtual, DWORD dwIsNLST, listing_t
 	}
 }
 
-DWORD VFS::Map(const char *pszVirtual, string &strLocal, tree<MOUNTPOINT> *ptree)
+DWORD VFS::Map(const wchar_t *pszVirtual, wstring &strLocal, tree<MOUNTPOINT> *ptree)
 // Recursive function to map a virtual path to a local path.
 {
-	const char *psz;
+	const wchar_t *psz;
 	UINT_PTR dwLen;
 
-	psz = strchr(pszVirtual, '/');
+	psz = wcschr(pszVirtual, L'/');
 	if (psz) dwLen = psz - pszVirtual;
-	else dwLen = strlen(pszVirtual);
+	else dwLen = wcslen(pszVirtual);
 	while (ptree) {
-		if ((ptree->_data.strVirtual.length() == dwLen) && (!dwLen || !_strnicmp(pszVirtual, ptree->_data.strVirtual.c_str(), dwLen))) {
+		if ((ptree->_data.strVirtual.length() == dwLen) && (!dwLen || !_wcsnicmp(pszVirtual, ptree->_data.strVirtual.c_str(), dwLen))) {
 			if (psz) {
 				if (Map(psz + 1, strLocal, ptree->_pdown)) return 1;
 				else {
 					if (ptree->_data.strLocal.length() != 0) {
 						strLocal = ptree->_data.strLocal;
 						strLocal += psz;
-						replace(strLocal.begin(), strLocal.end(), '/', '\\');
+						replace(strLocal.begin(), strLocal.end(), L'/', L'\\');
 						return 1;
 					} else {
 						return 0;
@@ -151,18 +151,18 @@ DWORD VFS::Map(const char *pszVirtual, string &strLocal, tree<MOUNTPOINT> *ptree
 	return 0;
 } 
 
-tree<VFS::MOUNTPOINT> * VFS::FindMountPoint(const char *pszVirtual, tree<MOUNTPOINT> *ptree)
+tree<VFS::MOUNTPOINT> * VFS::FindMountPoint(const wchar_t *pszVirtual, tree<MOUNTPOINT> *ptree)
 // Returns a pointer to the tree node described by pszVirtual, or 0.
 {
-	const char *psz;
+	const wchar_t *psz;
 	UINT_PTR dwLen;
 
-	if (!strcmp(pszVirtual, "/")) return ptree;
-	psz = strchr(pszVirtual, '/');
+	if (!wcscmp(pszVirtual, L"/")) return ptree;
+	psz = wcschr(pszVirtual, L'/');
 	if (psz) dwLen = psz - pszVirtual;
-	else dwLen = strlen(pszVirtual);
+	else dwLen = wcslen(pszVirtual);
 	while (ptree) {
-		if ((ptree->_data.strVirtual.length() == dwLen) && (!dwLen || !_strnicmp(pszVirtual, ptree->_data.strVirtual.c_str(), dwLen))) {
+		if ((ptree->_data.strVirtual.length() == dwLen) && (!dwLen || !_wcsnicmp(pszVirtual, ptree->_data.strVirtual.c_str(), dwLen))) {
 			if (psz) {
 				return FindMountPoint(psz + 1, ptree->_pdown);
 			} else {
@@ -175,31 +175,31 @@ tree<VFS::MOUNTPOINT> * VFS::FindMountPoint(const char *pszVirtual, tree<MOUNTPO
 	return 0;
 }
 
-void VFS::CleanVirtualPath(const char *pszVirtual, string &strNewVirtual)
+void VFS::CleanVirtualPath(const wchar_t *pszVirtual, wstring &strNewVirtual)
 // Strips utter rubbish out of a virtual path.
 // Ex: /home/./user//...\ftp/  =>  /home/ftp
 {
-	const char *in = pszVirtual;
-	char *buf = new char[strlen(pszVirtual) + 4];
-	buf[0] = '\0'; buf[1] = '\0'; buf[2] = '\0';
-	char *out = buf + 3;
+	const wchar_t *in = pszVirtual;
+	wchar_t *buf = new wchar_t[wcslen(pszVirtual) + 4];
+	buf[0] = L'\0'; buf[1] = L'\0'; buf[2] = L'\0';
+	wchar_t *out = buf + 3;
 	do {
 		*out = *in;
-		if (*out == '\\') *out = '/'; // convert backslashes to forward slashes
-		if ((*out == '\0') || (*out == '/')) {
-			if (out[-1] == '.') { // output ends with "."
-				if (out[-2] == '\0') --out; // entire output is "."
-				else if (out[-2] == '/') { // output ends with "/."
-					if (out[-3] == '\0') --out; // entire output is "/."
+		if (*out == L'\\') *out = L'/'; // convert backslashes to forward slashes
+		if ((*out == L'\0') || (*out == L'/')) {
+			if (out[-1] == L'.') { // output ends with "."
+				if (out[-2] == L'\0') --out; // entire output is "."
+				else if (out[-2] == L'/') { // output ends with "/."
+					if (out[-3] == L'\0') --out; // entire output is "/."
 					else out -= 2;
 				}
-				else if (out[-2] == '.') { // output ends with ".."
-					if (out[-3] == '\0') out -= 2; // entire output is ".."
-					else if (out[-3] == '/') { // output ends with "/.."
-						if (out[-4] == '\0') out -= 2; // entire output is "/.."
+				else if (out[-2] == L'.') { // output ends with ".."
+					if (out[-3] == L'\0') out -= 2; // entire output is ".."
+					else if (out[-3] == L'/') { // output ends with "/.."
+						if (out[-4] == L'\0') out -= 2; // entire output is "/.."
 						else {
 							out -= 3;
-							while ((out[-1] != '\0') && (out[-1] != '/')) --out;
+							while ((out[-1] != L'\0') && (out[-1] != L'/')) --out;
 						}
 					}
 				}
@@ -207,21 +207,21 @@ void VFS::CleanVirtualPath(const char *pszVirtual, string &strNewVirtual)
 			}
 			else {
 				++in;
-				if (out[-1] != '/') ++out;
+				if (out[-1] != L'/') ++out;
 			}
 		}
 		else ++in, ++out;
-	} while (in[-1] != '\0');
+	} while (in[-1] != L'\0');
 	strNewVirtual = buf + 3;
 	delete[] buf;
 }
 
-void VFS::ResolveRelative(const char *pszCurrentVirtual, const char *pszRelativeVirtual, string &strNewVirtual)
+void VFS::ResolveRelative(const wchar_t *pszCurrentVirtual, const wchar_t *pszRelativeVirtual, wstring &strNewVirtual)
 // Concatenates pszRelativeVirtual to pszCurrentVirtual and resolves.
 {
-	if (*pszRelativeVirtual!='/') {
+	if (*pszRelativeVirtual!=L'/') {
 		strNewVirtual = pszCurrentVirtual;
-		strNewVirtual += "/";
+		strNewVirtual += L"/";
 		strNewVirtual += pszRelativeVirtual;
 		CleanVirtualPath(strNewVirtual.c_str(), strNewVirtual);
 	}
@@ -230,18 +230,18 @@ void VFS::ResolveRelative(const char *pszCurrentVirtual, const char *pszRelative
 	}
 }
 
-bool VFS::WildcardMatch(const char *pszFilespec, const char *pszFilename)
+bool VFS::WildcardMatch(const wchar_t *pszFilespec, const wchar_t *pszFilename)
 // Returns true iff pszFilename matches wildcard pattern pszFilespec.
 {
 	if (*pszFilespec == 0) return true;
 	while (*pszFilespec) {
-		if (*pszFilespec == '*') {
+		if (*pszFilespec == L'*') {
 			pszFilespec++;
 			do {
 				if (WildcardMatch(pszFilespec, pszFilename)) return true;
 			} while (*pszFilename++);
 			return false;
-		} else if (((*pszFilespec | 0x20) != (*pszFilename | 0x20)) && (*pszFilespec != '?')) {
+		} else if (((*pszFilespec | 0x20) != (*pszFilename | 0x20)) && (*pszFilespec != L'?')) {
 			return false;
 		}
 		pszFilespec++;
@@ -251,15 +251,15 @@ bool VFS::WildcardMatch(const char *pszFilespec, const char *pszFilename)
 	else return false;
 }
 
-LPVOID VFS::FindFirstFile(const char *pszVirtual, WIN32_FIND_DATA *pw32fd)
+LPVOID VFS::FindFirstFile(const wchar_t *pszVirtual, WIN32_FIND_DATA *pw32fd)
 // Returns a find handle if a match was found. Otherwise returns 0.
 // Supports wildcards.
 {
 	FINDDATA *pfd;
-	const char *psz;
-	string str;
+	const wchar_t *psz;
+	wstring str;
 
-	psz = strrchr(pszVirtual, '/');
+	psz = wcsrchr(pszVirtual, L'/');
 	if (psz == NULL) return NULL;
 	str.assign(pszVirtual, psz);
 	pfd = new FINDDATA;
@@ -279,11 +279,11 @@ LPVOID VFS::FindFirstFile(const char *pszVirtual, WIN32_FIND_DATA *pw32fd)
 bool VFS::FindNextFile(LPVOID lpFindHandle, WIN32_FIND_DATA *pw32fd)
 {
 	FINDDATA *pfd = (FINDDATA *)lpFindHandle;
-	string str;
+	wstring str;
 
 	while (pfd->ptree) {
 		str = pfd->ptree->_data.strVirtual;
-		if (str.find_first_of('.') == string::npos) str.push_back('.');
+		if (str.find_first_of(L'.') == wstring::npos) str.push_back(L'.');
 		if (WildcardMatch(pfd->strFilespec.c_str(), str.c_str())) {
 			GetMountPointFindData(pfd->ptree, pw32fd);
 			pfd->ptree = pfd->ptree->_pright;
@@ -313,7 +313,7 @@ void VFS::FindClose(LPVOID lpFindHandle)
 	delete pfd;
 }
 
-bool VFS::FileExists(const char *pszVirtual)
+bool VFS::FileExists(const wchar_t *pszVirtual)
 // Returns true iff pszVirtual denotes an existing file or folder.
 // Supports wildcards.
 {
@@ -329,11 +329,11 @@ bool VFS::FileExists(const char *pszVirtual)
 	}
 }
 
-bool VFS::IsFolder(const char *pszVirtual)
+bool VFS::IsFolder(const wchar_t *pszVirtual)
 // Returns true iff pszVirtual denotes an existing folder.
 // Does NOT support wildcards.
 {
-	string strLocal;
+	wstring strLocal;
 	DWORD dw;
 
 	if (FindMountPoint(pszVirtual, &_root)) return true;
@@ -355,12 +355,12 @@ void VFS::GetMountPointFindData(tree<MOUNTPOINT> *ptree, WIN32_FIND_DATA *pw32fd
 		pw32fd->dwFileAttributes = FILE_ATTRIBUTE_DIRECTORY;
 		SystemTimeToFileTime(&st, &pw32fd->ftLastWriteTime);
 	}
-	strcpy_s(pw32fd->cFileName, sizeof(pw32fd->cFileName), ptree->_data.strVirtual.c_str());
+	wcscpy_s(pw32fd->cFileName, sizeof(pw32fd->cFileName), ptree->_data.strVirtual.c_str());
 }
 
-HANDLE VFS::CreateFile(const char *pszVirtual, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition)
+HANDLE VFS::CreateFile(const wchar_t *pszVirtual, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition)
 {
-	string strLocal;
+	wstring strLocal;
 
 	if (Map(pszVirtual, strLocal, &_root)) {
 		return ::CreateFile(strLocal.c_str(), dwDesiredAccess, dwShareMode, 0, dwCreationDisposition, FILE_FLAG_SEQUENTIAL_SCAN, 0);
@@ -369,30 +369,30 @@ HANDLE VFS::CreateFile(const char *pszVirtual, DWORD dwDesiredAccess, DWORD dwSh
 	}
 }
 
-BOOL VFS::DeleteFile(const char *pszVirtual)
+BOOL VFS::DeleteFile(const wchar_t *pszVirtual)
 {
-	string strLocal;
+	wstring strLocal;
 
 	return (Map(pszVirtual, strLocal, &_root) && ::DeleteFile(strLocal.c_str()));
 }
 
-BOOL VFS::MoveFile(const char *pszOldVirtual, const char *pszNewVirtual)
+BOOL VFS::MoveFile(const wchar_t *pszOldVirtual, const wchar_t *pszNewVirtual)
 {
-	string strOldLocal, strNewLocal;
+	wstring strOldLocal, strNewLocal;
 
 	return (Map(pszOldVirtual, strOldLocal, &_root) && Map(pszNewVirtual, strNewLocal, &_root) && ::MoveFile(strOldLocal.c_str(), strNewLocal.c_str()));
 }
 
-BOOL VFS::CreateDirectory(const char *pszVirtual)
+BOOL VFS::CreateDirectory(const wchar_t *pszVirtual)
 {
-	string strLocal;
+	wstring strLocal;
 
 	return (Map(pszVirtual, strLocal, &_root) && ::CreateDirectory(strLocal.c_str(), NULL));
 }
 
-BOOL VFS::RemoveDirectory(const char *pszVirtual)
+BOOL VFS::RemoveDirectory(const wchar_t *pszVirtual)
 {
-	string strLocal;
+	wstring strLocal;
 
 	return (Map(pszVirtual, strLocal, &_root) && ::RemoveDirectory(strLocal.c_str()));
 }

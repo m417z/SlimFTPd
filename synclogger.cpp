@@ -29,10 +29,10 @@
 
 #include "synclogger.h"
 
-SyncLogger::SyncLogger(const char *pszFilename)
+SyncLogger::SyncLogger(const wchar_t *pszFilename)
 {
 	_hLogFile=CreateFile(pszFilename,GENERIC_WRITE,FILE_SHARE_READ,0,OPEN_ALWAYS,0,0);
-	if (_hLogFile) {
+	if (_hLogFile!=INVALID_HANDLE_VALUE) {
 		SetFilePointer(_hLogFile,0,0,FILE_END);
 		_hLoggerThread=CreateThread(0,0,(LPTHREAD_START_ROUTINE)SyncLoggerThread,this,0,&_dwLoggerThreadId);
 	}
@@ -48,23 +48,23 @@ SyncLogger::~SyncLogger()
 	if (_hLogFile) CloseHandle(_hLogFile);
 }
 
-void SyncLogger::Log(const char *pszText)
+void SyncLogger::Log(const wchar_t *pszText)
 {
-	char *psz;
+	wchar_t *psz;
 	DWORD dwDateLen, dwTimeLen;
 
 	if (_hLogFile && _dwLoggerThreadId && pszText) {
 		dwDateLen=GetDateFormat(LOCALE_SYSTEM_DEFAULT,DATE_SHORTDATE,0,0,0,0);
 		dwTimeLen=GetTimeFormat(LOCALE_SYSTEM_DEFAULT,0,0,0,0,0);
-		size_t buflen = dwDateLen+dwTimeLen+strlen(pszText)+5;
-		psz=new char[buflen];
-		psz[0]='[';
+		size_t buflen = dwDateLen+dwTimeLen+wcslen(pszText)+5;
+		psz=new wchar_t[buflen];
+		psz[0]=L'[';
 		GetDateFormat(LOCALE_SYSTEM_DEFAULT,DATE_SHORTDATE,0,0,psz+1,dwDateLen);
-		psz[dwDateLen]=' ';
+		psz[dwDateLen]=L' ';
 		GetTimeFormat(LOCALE_SYSTEM_DEFAULT,0,0,0,psz+dwDateLen+1,dwTimeLen);
-		strcat_s(psz, buflen, "] ");
-		strcat_s(psz, buflen, pszText);
-		strcat_s(psz, buflen, "\r\n");
+		wcscat_s(psz, buflen, L"] ");
+		wcscat_s(psz, buflen, pszText);
+		wcscat_s(psz, buflen, L"\r\n");
 		while (!PostThreadMessage(_dwLoggerThreadId,WM_USER,0,(LPARAM)psz)) Sleep(0);
 	}
 }
@@ -78,8 +78,8 @@ DWORD WINAPI SyncLogger::SyncLoggerThread(SyncLogger *pthis)
 	while (GetMessage(&msg,0,0,0)) {
 		switch (msg.message) {
 		case WM_USER:
-			WriteFile(pthis->_hLogFile, (char *)msg.lParam, (DWORD)strlen((char *)msg.lParam), &dw, 0);
-			delete (char *)msg.lParam;
+			WriteFile(pthis->_hLogFile, (wchar_t *)msg.lParam, (DWORD)wcslen((wchar_t *)msg.lParam)*sizeof(wchar_t), &dw, 0);
+			delete (wchar_t *)msg.lParam;
 		}
 	}
 

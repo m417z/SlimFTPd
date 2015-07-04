@@ -41,41 +41,40 @@ class VFS
 {
 private:
 	struct MOUNTPOINT {
-		string strVirtual;
-		string strLocal;
+		wstring strVirtual;
+		wstring strLocal;
 	};
 	struct FINDDATA {
-		string strVirtual;
-		string strFilespec;
+		wstring strVirtual;
+		wstring strFilespec;
 		HANDLE hFind;
 		tree<MOUNTPOINT> *ptree;
 	};
 
 	tree<MOUNTPOINT> _root;
 
-	static DWORD Map(const char *pszVirtual, string &strLocal, tree<MOUNTPOINT> *ptree);
-	static tree<MOUNTPOINT> * FindMountPoint(const char *pszVirtual, tree<MOUNTPOINT> *ptree);
-	static bool WildcardMatch(const char *pszFilespec, const char *pszFilename);
+	static DWORD Map(const wchar_t *pszVirtual, wstring &strLocal, tree<MOUNTPOINT> *ptree);
+	static tree<MOUNTPOINT> * FindMountPoint(const wchar_t *pszVirtual, tree<MOUNTPOINT> *ptree);
+	static bool WildcardMatch(const wchar_t *pszFilespec, const wchar_t *pszFilename);
 	static void GetMountPointFindData(tree<MOUNTPOINT> *ptree, WIN32_FIND_DATA *pw32fd);
 
 public:
-	typedef map<string, string> listing_type;
+	typedef map<wstring, wstring> listing_type;
 	VFS();
-	void Mount(const char *pszVirtual, const char *pszLocal);
-	DWORD GetDirectoryListing(const char *pszVirtual, DWORD dwIsNLST, listing_type &listing);
-	bool FileExists(const char *pszVirtual);
-	bool IsFolder(const char *pszVirtual);
-	LPVOID FindFirstFile(const char *pszVirtual, WIN32_FIND_DATA *pw32fd);
+	void Mount(const wchar_t *pszVirtual, const wchar_t *pszLocal);
+	DWORD GetDirectoryListing(const wchar_t *pszVirtual, DWORD dwIsNLST, listing_type &listing);
+	bool FileExists(const wchar_t *pszVirtual);
+	bool IsFolder(const wchar_t *pszVirtual);
+	LPVOID FindFirstFile(const wchar_t *pszVirtual, WIN32_FIND_DATA *pw32fd);
 	bool FindNextFile(LPVOID lpFindHandle, WIN32_FIND_DATA *pw32fd);
 	void FindClose(LPVOID lpFindHandle);
-	HANDLE CreateFile(const char *pszVirtual, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition);
-	BOOL DeleteFile(const char *pszVirtual);
-	BOOL MoveFile(const char *pszOldVirtual, const char *pszNewVirtual);
-	BOOL CreateDirectory(const char *pszVirtual);
-	BOOL RemoveDirectory(const char *pszVirtual);
-	static void CleanVirtualPath(const char *pszVirtual, string &strNewVirtual);
-	static void ResolveRelative(const char *pszCurrentVirtual, const char *pszRelativeVirtual, string &strNewVirtual);
-	static void strtr(char *psz, char cFrom, char cTo);
+	HANDLE CreateFile(const wchar_t *pszVirtual, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition);
+	BOOL DeleteFile(const wchar_t *pszVirtual);
+	BOOL MoveFile(const wchar_t *pszOldVirtual, const wchar_t *pszNewVirtual);
+	BOOL CreateDirectory(const wchar_t *pszVirtual);
+	BOOL RemoveDirectory(const wchar_t *pszVirtual);
+	static void CleanVirtualPath(const wchar_t *pszVirtual, wstring &strNewVirtual);
+	static void ResolveRelative(const wchar_t *pszCurrentVirtual, const wchar_t *pszRelativeVirtual, wstring &strNewVirtual);
 };
 
 #endif

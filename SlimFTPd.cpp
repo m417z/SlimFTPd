@@ -27,7 +27,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <winsock.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <shlwapi.h>
 #include <algorithm>
@@ -39,7 +40,7 @@
 
 using namespace std;
 
-#define SERVERID "SlimFTPd 3.181, by WhitSoft Development (www.whitsoftdev.com)"
+#define SERVERID L"SlimFTPd 3.181, by WhitSoft Development (www.whitsoftdev.com)"
 #define PACKET_SIZE 1452
 #define IP_ADDRESS_TYPE_LAN 1
 #define IP_ADDRESS_TYPE_WAN 2
@@ -55,26 +56,27 @@ void Cleanup();
 // }
 
 // Configuration functions {
-void LogConfError(const char *, DWORD, const char *);
-bool ConfParseScript(const char *);
-bool ConfSetBindInterface(const char *pszArg, DWORD dwLine);
-bool ConfSetBindPort(const char *pszArg, DWORD dwLine);
-bool ConfSetMaxConnections(const char *pszArg, DWORD dwLine);
-bool ConfSetCommandTimeout(const char *pszArg, DWORD dwLine);
-bool ConfSetConnectTimeout(const char *pszArg, DWORD dwLine);
-bool ConfSetAdminPassword(const char *pszArg, DWORD dwLine);
-bool ConfSetLookupHosts(const char *pszArg, DWORD dwLine);
-bool ConfAddUser(const char *pszArg, DWORD dwLine);
-bool ConfSetUserPassword(const char *pszUser, const char *pszArg, DWORD dwLine);
-bool ConfSetMountPoint(const char *pszUser, const char *pszVirtual, const char *pszLocal, DWORD dwLine);
-bool ConfSetPermission(DWORD dwMode, const char *pszUser, const char *pszVirtual, const char *pszPerms, DWORD dwLine);
+void LogConfError(const wchar_t *, DWORD, const wchar_t *);
+bool ConfParseScript(const wchar_t *);
+bool ConfSetBindInterface(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetBindPort(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetMaxConnections(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetCommandTimeout(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetConnectTimeout(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetAdminPassword(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetLookupHosts(const wchar_t *pszArg, DWORD dwLine);
+bool ConfAddUser(const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetUserPassword(const wchar_t *pszUser, const wchar_t *pszArg, DWORD dwLine);
+bool ConfSetMountPoint(const wchar_t *pszUser, const wchar_t *pszVirtual, const wchar_t *pszLocal, DWORD dwLine);
+bool ConfSetPermission(DWORD dwMode, const wchar_t *pszUser, const wchar_t *pszVirtual, const wchar_t *pszPerms, DWORD dwLine);
 // }
 
 // Network functions {
 bool WINAPI ListenThread(LPVOID);
 bool WINAPI ConnectionThread(SOCKET);
-bool SocketSendString(SOCKET, const char *);
-DWORD SocketReceiveString(SOCKET, char *, DWORD);
+bool SocketSendString(SOCKET, const wchar_t *);
+DWORD SocketReceiveString(SOCKET, wchar_t *, DWORD);
+bool SocketReceiveLetter(SOCKET, wchar_t *);
 DWORD SocketReceiveData(SOCKET, char *, DWORD);
 SOCKET EstablishDataConnection(SOCKADDR_IN *, SOCKET *);
 void LookupHost(IN_ADDR ia, char *pszHostName, size_t stHostName);
@@ -82,11 +84,11 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, 
 // }
 
 // Miscellaneous support functions {
-DWORD FileReadLine(HANDLE, char *, DWORD);
-DWORD SplitTokens(char *);
-const char * GetToken(const char *, DWORD);
+DWORD FileReadLine(HANDLE, wchar_t *, DWORD);
+DWORD SplitTokens(wchar_t *);
+const wchar_t * GetToken(const wchar_t *, DWORD);
 DWORD GetIPAddressType(IN_ADDR ia);
-bool CanUserLogin(const char *pszUser, IN_ADDR iaPeer);
+bool CanUserLogin(const wchar_t *pszUser, IN_ADDR iaPeer);
 // }
 
 // Global Variables {
@@ -106,7 +108,7 @@ SyncLogger *pLog;
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pszCmdLine, int nShowCmd)
 {
 	OSVERSIONINFO ovi;
-	SERVICE_TABLE_ENTRY ste[]={ { "SlimFTPd", (LPSERVICE_MAIN_FUNCTION)ServiceMain }, { 0, 0 } };
+	SERVICE_TABLE_ENTRY ste[]={ { L"SlimFTPd", (LPSERVICE_MAIN_FUNCTION)ServiceMain }, { 0, 0 } };
 	HMODULE hKernel32;
 	FARPROC RegisterServiceProcess;
 	MSG msg;
@@ -119,15 +121,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pszCmdLin
 	isWinNT = (ovi.dwPlatformId == VER_PLATFORM_WIN32_NT);
 
 	// Are we starting as a service?
-	if (strstr(GetCommandLine(), "-service") != 0) {
+	if (wcsstr(GetCommandLine(), L"-service") != 0) {
 		if (isWinNT) {
 			isService = true;
 			StartServiceCtrlDispatcher(ste);
 			Cleanup();
-			return false;
+			return 0;
 		} else {
 			isService = false;
-			hKernel32=LoadLibrary("KERNEL32.DLL");
+			hKernel32=LoadLibrary(L"KERNEL32.DLL");
 			RegisterServiceProcess=GetProcAddress(hKernel32,"RegisterServiceProcess");
 			((DWORD (__stdcall *)(DWORD, DWORD))RegisterServiceProcess)(0,1);
 			FreeLibrary(hKernel32);
@@ -142,18 +144,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pszCmdLin
 			DispatchMessage(&msg);
 		}
 	} else {
-		pLog->Log("An error occurred while starting SlimFTPd.");
+		pLog->Log(L"An error occurred while starting SlimFTPd.");
 	}
 
 	Cleanup();
 
-	return false;
+	return 0;
 }
 
 VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR lpszArgv)
 {
 	// Starting up as a Windows NT service
-	hServiceStatus=RegisterServiceCtrlHandler("SlimFTPd",(LPHANDLER_FUNCTION)ServiceHandler);
+	hServiceStatus=RegisterServiceCtrlHandler(L"SlimFTPd",(LPHANDLER_FUNCTION)ServiceHandler);
 	ServiceStatus.dwServiceType=SERVICE_WIN32_OWN_PROCESS;
 	ServiceStatus.dwCurrentState=SERVICE_RUNNING;
 	ServiceStatus.dwControlsAccepted=SERVICE_ACCEPT_STOP|SERVICE_ACCEPT_SHUTDOWN;
@@ -164,7 +166,7 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR lpszArgv)
 	SetServiceStatus(hServiceStatus,&ServiceStatus);
 
 	if (!Startup()) {
-		pLog->Log("An error occurred while starting SlimFTPd.");
+		pLog->Log(L"An error occurred while starting SlimFTPd.");
 		ServiceStatus.dwCurrentState=SERVICE_STOPPED;
 		SetServiceStatus(hServiceStatus,&ServiceStatus);
 	}
@@ -177,12 +179,12 @@ VOID WINAPI ServiceHandler(DWORD fdwControl)
 			SetServiceStatus(hServiceStatus,&ServiceStatus);
 			break;
 		case SERVICE_CONTROL_STOP:
-			pLog->Log("The SlimFTPd service has received a request to stop.");
+			pLog->Log(L"The SlimFTPd service has received a request to stop.");
 			ServiceStatus.dwCurrentState=SERVICE_STOPPED;
 			SetServiceStatus(hServiceStatus,&ServiceStatus);
 			break;
 		case SERVICE_CONTROL_SHUTDOWN:
-			pLog->Log("The SlimFTPd service has received notification of a system shutdown.");
+			pLog->Log(L"The SlimFTPd service has received notification of a system shutdown.");
 			ServiceStatus.dwCurrentState=SERVICE_STOPPED;
 			SetServiceStatus(hServiceStatus,&ServiceStatus);
 			break;
@@ -192,15 +194,15 @@ VOID WINAPI ServiceHandler(DWORD fdwControl)
 bool Startup()
 {
 	WSADATA wsad;
-	char szLogFile[512], szConfFile[512];
+	wchar_t szLogFile[512], szConfFile[512];
 	DWORD dw;
 
 	// Construct log and config filenames
 	GetModuleFileName(0,szLogFile,512);
-	*strrchr(szLogFile, '\\') = 0;
-	strcpy_s(szConfFile,szLogFile);
-	strcat_s(szLogFile, "\\SlimFTPd.log");
-	strcat_s(szConfFile, "\\SlimFTPd.conf");
+	*wcsrchr(szLogFile, L'\\') = 0;
+	wcscpy_s(szConfFile,szLogFile);
+	wcscat_s(szLogFile, L"\\SlimFTPd.log");
+	wcscat_s(szConfFile, L"\\SlimFTPd.conf");
 
 	// Start logger thread
 	pLog=new SyncLogger(szLogFile);
@@ -209,10 +211,10 @@ bool Startup()
 	pUsers = new UserDB;
 
 	// Log some startup info
-	pLog->Log("-------------------------------------------------------------------------------");
+	pLog->Log(L"-------------------------------------------------------------------------------");
 	pLog->Log(SERVERID);
-	if (isService) pLog->Log("The SlimFTPd service is starting.");
-	else pLog->Log("SlimFTPd is starting.");
+	if (isService) pLog->Log(L"The SlimFTPd service is starting.");
+	else pLog->Log(L"SlimFTPd is starting.");
 
 	// Init listen socket to defaults
 	ZeroMemory(&saiListen,sizeof(SOCKADDR_IN));
@@ -229,7 +231,7 @@ bool Startup()
 	// Create and bind the listen socket
 	sListen=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (bind(sListen,(SOCKADDR *)&saiListen,sizeof(SOCKADDR_IN))) {
-		pLog->Log("Unable to bind socket. Specified port may already be in use.");
+		pLog->Log(L"Unable to bind socket. Specified port may already be in use.");
 		closesocket(sListen);
 		return false;
 	}
@@ -247,8 +249,8 @@ void Cleanup()
 	WSACleanup();
 
 	// Log the stop of the service
-	if (isService) pLog->Log("The SlimFTPd service has stopped.");
-	else pLog->Log("SlimFTPd has stopped.");
+	if (isService) pLog->Log(L"The SlimFTPd service has stopped.");
+	else pLog->Log(L"SlimFTPd has stopped.");
 
 	// Deallocate the user database
 	delete pUsers;
@@ -257,30 +259,30 @@ void Cleanup()
 	delete pLog;
 }
 
-void LogConfError(const char *pszError, DWORD dwLine, const char *pszArg)
+void LogConfError(const wchar_t *pszError, DWORD dwLine, const wchar_t *pszArg)
 {
-	char sz[1024];
-	sprintf_s(sz, (string("Error on line %u: ") + pszError).c_str(), dwLine, pszArg);
+	wchar_t sz[1024];
+	swprintf_s(sz, (wstring(L"Error on line %u: ") + pszError).c_str(), dwLine, pszArg);
 	pLog->Log(sz);
 }
 
-bool ConfParseScript(const char *pszFileName)
+bool ConfParseScript(const wchar_t *pszFileName)
 {
 // Opens and parses a SlimFTPd configuration script file.
 // Returns false on error, or true on success.
 
-	char sz[512], *psz, *psz2;
-	string strUser;
+	wchar_t sz[512], *psz, *psz2;
+	wstring strUser;
 	DWORD dwLen, dwLine, dwTokens;
 	HANDLE hFile;
 
-	sprintf_s(sz,"Executing \"%s\"...",strrchr(pszFileName,'\\')+1);
+	swprintf_s(sz,L"Executing \"%s\"...",wcsrchr(pszFileName,L'\\')+1);
 	pLog->Log(sz);
 
 	// Open config file
 	hFile=CreateFile(pszFileName,GENERIC_READ,0,0,OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0);
 	if (hFile==INVALID_HANDLE_VALUE) {
-		pLog->Log("Unable to open \"SlimFTPd.conf\".");
+		pLog->Log(L"Unable to open \"SlimFTPd.conf\".");
 		return false;
 	}
 
@@ -289,95 +291,95 @@ bool ConfParseScript(const char *pszFileName)
 		if (dwLen==-1) {
 			CloseHandle(hFile);
 			if (!strUser.empty()) {
-				LogConfError("Premature end of script encountered: unterminated User block.",dwLine,0);
+				LogConfError(L"Premature end of script encountered: unterminated User block.",dwLine,0);
 				return false;
 			} else {
-				pLog->Log("Configuration script parsed successfully.");
+				pLog->Log(L"Configuration script parsed successfully.");
 				return true;
 			}
 		} else if (dwLen>=512) {
-			LogConfError("Line is too long to parse.",dwLine,0);
+			LogConfError(L"Line is too long to parse.",dwLine,0);
 			break;
 		}
 		psz=sz;
-		while (*psz==' ' || *psz=='\t') psz++;
-		if (!*psz || *psz=='#') continue;
+		while (*psz==L' ' || *psz==L'\t') psz++;
+		if (!*psz || *psz==L'#') continue;
 
-		if (*psz=='<') {
-			psz2=strchr(psz,'>');
+		if (*psz==L'<') {
+			psz2=wcschr(psz,L'>');
 			if (psz2) {
 				*(psz2++)=0;
-				while (*psz2==' ' || *psz2=='\t') psz2++;
+				while (*psz2==L' ' || *psz2==L'\t') psz2++;
 				if (*psz2) {
-					LogConfError("Syntax error. Expected end of line after '>'.",dwLine,0);
+					LogConfError(L"Syntax error. Expected end of line after '>'.",dwLine,0);
 					break;
 				}
 				psz++;
 			} else {
-				LogConfError("Syntax error. Expected '>' before end of line.",dwLine,0);
+				LogConfError(L"Syntax error. Expected '>' before end of line.",dwLine,0);
 				break;
 			}
 		}
 
 		dwTokens=SplitTokens(psz);
 
-		if (!_stricmp(psz,"BindInterface")) {
+		if (!_wcsicmp(psz,L"BindInterface")) {
 			if (dwTokens==2) {
 				if (!ConfSetBindInterface(GetToken(psz,2),dwLine)) break;
 			} else {
-				LogConfError("BindInterface directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"BindInterface directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"BindPort")) {
+		else if (!_wcsicmp(psz,L"BindPort")) {
 			if (dwTokens==2) {
 				if (!ConfSetBindPort(GetToken(psz,2),dwLine)) break;
 			} else {
-				LogConfError("BindPort directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"BindPort directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"MaxConnections")) {
+		else if (!_wcsicmp(psz,L"MaxConnections")) {
 			if (dwTokens==2) {
 				if (!ConfSetMaxConnections(GetToken(psz,2),dwLine)) break;
 			} else {
-				LogConfError("MaxConnections directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"MaxConnections directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"CommandTimeout")) {
+		else if (!_wcsicmp(psz,L"CommandTimeout")) {
 			if (dwTokens==2) {
 				if (!ConfSetCommandTimeout(GetToken(psz,2),dwLine)) break;
 			} else {
-				LogConfError("CommandTimeout directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"CommandTimeout directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"ConnectTimeout")) {
+		else if (!_wcsicmp(psz,L"ConnectTimeout")) {
 			if (dwTokens==2) {
 				if (!ConfSetConnectTimeout(GetToken(psz,2),dwLine)) break;
 			} else {
-				LogConfError("ConnectTimeout directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"ConnectTimeout directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"LookupHosts")) {
+		else if (!_wcsicmp(psz,L"LookupHosts")) {
 			if (dwTokens==2) {
 				if (!ConfSetLookupHosts(GetToken(psz,2),dwLine)) break;
 			} else {
-				LogConfError("LookupHosts directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"LookupHosts directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"User")) {
+		else if (!_wcsicmp(psz,L"User")) {
 			if (!strUser.empty()) {
-				LogConfError("<User> directive invalid inside User block.",dwLine,0);
+				LogConfError(L"<User> directive invalid inside User block.",dwLine,0);
 				break;
 			} else if (dwTokens==2) {
 				if (ConfAddUser(GetToken(psz,2),dwLine)) {
@@ -386,93 +388,93 @@ bool ConfParseScript(const char *pszFileName)
 					break;
 				}
 			} else {
-				LogConfError("<User> directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"<User> directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 		
-		else if (!_stricmp(psz,"/User")) {
+		else if (!_wcsicmp(psz,L"/User")) {
 			if (strUser.empty()) {
-				LogConfError("</User> directive invalid outside of User block.",dwLine,0);
+				LogConfError(L"</User> directive invalid outside of User block.",dwLine,0);
 				break;
 			} else if (dwTokens==1) {
 				strUser.clear();
 			} else {
-				LogConfError("</User> directive should not have any arguments.",dwLine,0);
+				LogConfError(L"</User> directive should not have any arguments.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"Password")) {
+		else if (!_wcsicmp(psz,L"Password")) {
 			if (strUser.empty()) {
-				LogConfError("Password directive invalid outside of User block.",dwLine,0);
+				LogConfError(L"Password directive invalid outside of User block.",dwLine,0);
 				break;
 			} else if (dwTokens==2) {
 				if (!ConfSetUserPassword(strUser.c_str(), GetToken(psz, 2), dwLine)) break;
 			} else {
-				LogConfError("Password directive should have exactly 1 argument.",dwLine,0);
+				LogConfError(L"Password directive should have exactly 1 argument.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"Mount")) {
+		else if (!_wcsicmp(psz,L"Mount")) {
 			if (strUser.empty()) {
-				LogConfError("Mount directive invalid outside of User block.",dwLine,0);
+				LogConfError(L"Mount directive invalid outside of User block.",dwLine,0);
 				break;
 			} else if (dwTokens==3) {
 				if (!ConfSetMountPoint(strUser.c_str(), GetToken(psz, 2), GetToken(psz, 3), dwLine)) break;
 			} else {
-				LogConfError("Mount directive should have exactly 2 arguments.",dwLine,0);
+				LogConfError(L"Mount directive should have exactly 2 arguments.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"Allow")) {
+		else if (!_wcsicmp(psz,L"Allow")) {
 			if (strUser.empty()) {
-				LogConfError("Allow directive invalid outside of User block.",dwLine,0);
+				LogConfError(L"Allow directive invalid outside of User block.",dwLine,0);
 				break;
 			} else if (dwTokens>=3) {
 				if (!ConfSetPermission(1, strUser.c_str(), GetToken(psz, 2), GetToken(psz, 3), dwLine)) break;
 			} else {
-				LogConfError("Allow directive should have at least 2 arguments.",dwLine,0);
+				LogConfError(L"Allow directive should have at least 2 arguments.",dwLine,0);
 				break;
 			}
 		}
 
-		else if (!_stricmp(psz,"Deny")) {
+		else if (!_wcsicmp(psz,L"Deny")) {
 			if (strUser.empty()) {
-				LogConfError("Deny directive invalid outside of User block.",dwLine,0);
+				LogConfError(L"Deny directive invalid outside of User block.",dwLine,0);
 				break;
 			} else if (dwTokens>=3) {
 				if (!ConfSetPermission(0, strUser.c_str(), GetToken(psz, 2), GetToken(psz, 3), dwLine)) break;
 			} else {
-				LogConfError("Deny directive should have at least 2 arguments.",dwLine,0);
+				LogConfError(L"Deny directive should have at least 2 arguments.",dwLine,0);
 				break;
 			}
 		}
 
 		else {
-			LogConfError("Directive \"%s\" not recognized.",dwLine,psz);
+			LogConfError(L"Directive \"%s\" not recognized.",dwLine,psz);
 			break;
 		}
 	}
 
 	CloseHandle(hFile);
-	pLog->Log("Failed parsing configuration script.");
+	pLog->Log(L"Failed parsing configuration script.");
 	return false;
 }
 
-bool ConfSetBindInterface(const char *pszArg, DWORD dwLine)
+bool ConfSetBindInterface(const wchar_t *pszArg, DWORD dwLine)
 {
 	char sz[512];
 	HOSTENT *phe;
 	DWORD dw;
 
-	if (!_stricmp(pszArg,"All")) {
+	if (!_wcsicmp(pszArg,L"All")) {
 		saiListen.sin_addr.S_un.S_addr=INADDR_ANY;
-	} else if (!_stricmp(pszArg,"Local")) {
+	} else if (!_wcsicmp(pszArg,L"Local")) {
 		saiListen.sin_addr.S_un.S_addr=htonl(INADDR_LOOPBACK);
-	} else if (!_stricmp(pszArg,"LAN")) {
+	} else if (!_wcsicmp(pszArg,L"LAN")) {
 		saiListen.sin_addr.S_un.S_addr=INADDR_NONE;
 		gethostname(sz,512);
 		phe=gethostbyname(sz);
@@ -485,10 +487,10 @@ bool ConfSetBindInterface(const char *pszArg, DWORD dwLine)
 			}
 		}
 		if (saiListen.sin_addr.S_un.S_addr==INADDR_NONE) {
-			LogConfError("BindInterface directive could not find a LAN interface.",dwLine,0);
+			LogConfError(L"BindInterface directive could not find a LAN interface.",dwLine,0);
 			return false;
 		}
-	} else if (!_stricmp(pszArg,"WAN")) {
+	} else if (!_wcsicmp(pszArg,L"WAN")) {
 		saiListen.sin_addr.S_un.S_addr=INADDR_NONE;
 		gethostname(sz,512);
 		phe=gethostbyname(sz);
@@ -501,20 +503,19 @@ bool ConfSetBindInterface(const char *pszArg, DWORD dwLine)
 			}
 		}
 		if (saiListen.sin_addr.S_un.S_addr==INADDR_NONE) {
-			LogConfError("BindInterface directive could not find a WAN interface.",dwLine,0);
+			LogConfError(L"BindInterface directive could not find a WAN interface.",dwLine,0);
 			return false;
 		}
 	} else {
-		saiListen.sin_addr.S_un.S_addr=inet_addr(pszArg);
-		if (saiListen.sin_addr.S_un.S_addr==INADDR_NONE) {
-			LogConfError("BindInterface directive does not recognize argument \"%s\".",dwLine,pszArg);
+		if (InetPton(AF_INET, pszArg, &saiListen.sin_addr.S_un.S_addr)!=1) {
+			LogConfError(L"BindInterface directive does not recognize argument \"%s\".",dwLine,pszArg);
 			return false;
 		}
 	}
 	return true;
 }
 
-bool ConfSetBindPort(const char *pszArg, DWORD dwLine)
+bool ConfSetBindPort(const wchar_t *pszArg, DWORD dwLine)
 {
 	WORD wPort;
 
@@ -523,16 +524,16 @@ bool ConfSetBindPort(const char *pszArg, DWORD dwLine)
 		saiListen.sin_port=htons(wPort);
 		return true;
 	} else {
-		LogConfError("BindPort directive does not recognize argument \"%s\".",dwLine,pszArg);
+		LogConfError(L"BindPort directive does not recognize argument \"%s\".",dwLine,pszArg);
 		return false;
 	}
 }
 
-bool ConfSetMaxConnections(const char *pszArg, DWORD dwLine)
+bool ConfSetMaxConnections(const wchar_t *pszArg, DWORD dwLine)
 {
 	DWORD dw;
 
-	if (!_stricmp(pszArg,"Off")) {
+	if (!_wcsicmp(pszArg,L"Off")) {
 		dwMaxConnections=-1;
 		return true;
 	} else {
@@ -541,13 +542,13 @@ bool ConfSetMaxConnections(const char *pszArg, DWORD dwLine)
 			dwMaxConnections=dw;
 			return true;
 		} else {
-			LogConfError("MaxConnections directive does not recognize argument \"%s\".",dwLine,pszArg);
+			LogConfError(L"MaxConnections directive does not recognize argument \"%s\".",dwLine,pszArg);
 			return false;
 		}
 	}
 }
 
-bool ConfSetCommandTimeout(const char *pszArg, DWORD dwLine)
+bool ConfSetCommandTimeout(const wchar_t *pszArg, DWORD dwLine)
 {
 	DWORD dw;
 
@@ -556,12 +557,12 @@ bool ConfSetCommandTimeout(const char *pszArg, DWORD dwLine)
 		dwCommandTimeout=dw;
 		return true;
 	} else {
-		LogConfError("CommandTimeout directive does not recognize argument \"%s\".",dwLine,pszArg);
+		LogConfError(L"CommandTimeout directive does not recognize argument \"%s\".",dwLine,pszArg);
 		return false;
 	}
 }
 
-bool ConfSetConnectTimeout(const char *pszArg, DWORD dwLine)
+bool ConfSetConnectTimeout(const wchar_t *pszArg, DWORD dwLine)
 {
 	DWORD dw;
 
@@ -570,70 +571,70 @@ bool ConfSetConnectTimeout(const char *pszArg, DWORD dwLine)
 		dwConnectTimeout=dw;
 		return true;
 	} else {
-		LogConfError("ConnectTimeout directive does not recognize argument \"%s\".",dwLine,pszArg);
+		LogConfError(L"ConnectTimeout directive does not recognize argument \"%s\".",dwLine,pszArg);
 		return false;
 	}
 }
 
-bool ConfSetLookupHosts(const char *pszArg, DWORD dwLine)
+bool ConfSetLookupHosts(const wchar_t *pszArg, DWORD dwLine)
 {
-	if (!_stricmp(pszArg,"Off")) {
+	if (!_wcsicmp(pszArg,L"Off")) {
 		bLookupHosts = false;
 		return true;
-	} else if (!_stricmp(pszArg,"On")) {
+	} else if (!_wcsicmp(pszArg,L"On")) {
 		bLookupHosts = true;
 		return true;
 	} else {
-		LogConfError("LookupHosts directive does not recognize argument \"%s\".",dwLine,pszArg);
+		LogConfError(L"LookupHosts directive does not recognize argument \"%s\".",dwLine,pszArg);
 		return false;
 	}
 }
 
-bool ConfAddUser(const char *pszArg, DWORD dwLine)
+bool ConfAddUser(const wchar_t *pszArg, DWORD dwLine)
 {
-	if (strlen(pszArg)<32) {
+	if (wcslen(pszArg)<32) {
 		if (pUsers->Add(pszArg)) {
 			return true;
 		} else {
-			LogConfError("User \"%s\" already defined.",dwLine,pszArg);
+			LogConfError(L"User \"%s\" already defined.",dwLine,pszArg);
 			return false;
 		}
 	} else {
-		LogConfError("Argument to User directive must be less than 32 characters long.",dwLine,0);
+		LogConfError(L"Argument to User directive must be less than 32 characters long.",dwLine,0);
 		return false;
 	}
 }
 
-bool ConfSetUserPassword(const char *pszUser, const char *pszArg, DWORD dwLine)
+bool ConfSetUserPassword(const wchar_t *pszUser, const wchar_t *pszArg, DWORD dwLine)
 {
-	if (strlen(pszArg)<32) {
+	if (wcslen(pszArg)<32) {
 		pUsers->SetPassword(pszUser,pszArg);
 		return true;
 	} else {
-		LogConfError("Argument to Password directive must be less than 32 characters long.",dwLine,0);
+		LogConfError(L"Argument to Password directive must be less than 32 characters long.",dwLine,0);
 		return false;
 	}
 }
 
-bool ConfSetMountPoint(const char *pszUser, const char *pszVirtual, const char *pszLocal, DWORD dwLine)
+bool ConfSetMountPoint(const wchar_t *pszUser, const wchar_t *pszVirtual, const wchar_t *pszLocal, DWORD dwLine)
 {
 	VFS *pvfs;
-	string strVirtual, strLocal;
+	wstring strVirtual, strLocal;
 
 	VFS::CleanVirtualPath(pszVirtual, strVirtual);
 
-	if (strVirtual.at(0) != '/') {
-		LogConfError("Mount directive cannot parse invalid virtual path \"%s\". Virtual paths must begin with a slash.", dwLine, strVirtual.c_str());
+	if (strVirtual.at(0) != L'/') {
+		LogConfError(L"Mount directive cannot parse invalid virtual path \"%s\". Virtual paths must begin with a slash.", dwLine, strVirtual.c_str());
 		return false;
 	}
 	if (pszLocal) {
 		strLocal = pszLocal;
-		replace(strLocal.begin(), strLocal.end(), '/', '\\');
-		if (*strLocal.rbegin() == '\\') {
+		replace(strLocal.begin(), strLocal.end(), L'/', L'\\');
+		if (*strLocal.rbegin() == L'\\') {
 			strLocal = strLocal.substr(0, strLocal.length() - 1);
 		}
 		if (GetFileAttributes(strLocal.c_str()) == -1) {
-			LogConfError("Mount directive cannot find local path \"%s\".", dwLine, strLocal.c_str());
+			LogConfError(L"Mount directive cannot find local path \"%s\".", dwLine, strLocal.c_str());
 			return false;
 		}
 	}
@@ -642,18 +643,18 @@ bool ConfSetMountPoint(const char *pszUser, const char *pszVirtual, const char *
 	return true;
 }
 
-bool ConfSetPermission(DWORD dwMode, const char *pszUser, const char *pszVirtual, const char *pszPerms, DWORD dwLine)
+bool ConfSetPermission(DWORD dwMode, const wchar_t *pszUser, const wchar_t *pszVirtual, const wchar_t *pszPerms, DWORD dwLine)
 {
 	PermDB *pperms;
 
-	string strVirtual;
+	wstring strVirtual;
 	VFS::CleanVirtualPath(pszVirtual, strVirtual);
 
-	if (strVirtual.at(0) != '/') {
+	if (strVirtual.at(0) != L'/') {
 		if (dwMode) {
-			LogConfError("Allow directive cannot parse invalid virtual path \"%s\". Virtual paths must begin with a slash.", dwLine, strVirtual.c_str());
+			LogConfError(L"Allow directive cannot parse invalid virtual path \"%s\". Virtual paths must begin with a slash.", dwLine, strVirtual.c_str());
 		} else {
-			LogConfError("Deny directive cannot parse invalid virtual path \"%s\". Virtual paths must begin with a slash.", dwLine, strVirtual.c_str());
+			LogConfError(L"Deny directive cannot parse invalid virtual path \"%s\". Virtual paths must begin with a slash.", dwLine, strVirtual.c_str());
 		}
 		return false;
 	}
@@ -662,24 +663,24 @@ bool ConfSetPermission(DWORD dwMode, const char *pszUser, const char *pszVirtual
 	if (!pperms) return false;
 
 	while (*pszPerms) {
-		if (!_stricmp(pszPerms,"Read")) {
+		if (!_wcsicmp(pszPerms,L"Read")) {
 			pperms->SetPerm(strVirtual.c_str(), PERM_READ, dwMode);
-		} else if (!_stricmp(pszPerms,"Write")) {
+		} else if (!_wcsicmp(pszPerms,L"Write")) {
 			pperms->SetPerm(strVirtual.c_str(), PERM_WRITE, dwMode);
-		} else if (!_stricmp(pszPerms,"List")) {
+		} else if (!_wcsicmp(pszPerms,L"List")) {
 			pperms->SetPerm(strVirtual.c_str(), PERM_LIST, dwMode);
-		} else if (!_stricmp(pszPerms,"Admin")) {
+		} else if (!_wcsicmp(pszPerms,L"Admin")) {
 			pperms->SetPerm(strVirtual.c_str(), PERM_ADMIN, dwMode);
-		} else if (!_stricmp(pszPerms,"All")) {
+		} else if (!_wcsicmp(pszPerms,L"All")) {
 			pperms->SetPerm(strVirtual.c_str(), PERM_READ, dwMode);
 			pperms->SetPerm(strVirtual.c_str(), PERM_WRITE, dwMode);
 			pperms->SetPerm(strVirtual.c_str(), PERM_LIST, dwMode);
 			pperms->SetPerm(strVirtual.c_str(), PERM_ADMIN, dwMode);
 		} else {
 			if (dwMode) {
-				LogConfError("Allow directive does not recognize argument \"%s\".",dwLine,pszPerms);
+				LogConfError(L"Allow directive does not recognize argument \"%s\".",dwLine,pszPerms);
 			} else {
-				LogConfError("Deny directive does not recognize argument \"%s\".",dwLine,pszPerms);
+				LogConfError(L"Deny directive does not recognize argument \"%s\".",dwLine,pszPerms);
 			}
 			return false;
 		}
@@ -693,7 +694,7 @@ bool WINAPI ListenThread(LPVOID lParam)
 	SOCKET sIncoming;
 	DWORD dw;
 
-	pLog->Log("Waiting for incoming connections...");
+	pLog->Log(L"Waiting for incoming connections...");
 
 	// Accept incoming connections and pass them to connection threads
 	while ((sIncoming=accept(sListen,0,0))!=INVALID_SOCKET) {
@@ -709,8 +710,9 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 {
 	SOCKET sData=0, sPasv=0;
 	SOCKADDR_IN saiCmd, saiCmdPeer, saiData, saiPasv;
-	char szPeerName[64], szOutput[1024], szCmd[512], *pszParam;
-	string strUser, strCurrentVirtual, strNewVirtual, strRnFr;
+	char szPeerName[64];
+	wchar_t szOutput[1024], szCmd[512], *pszParam;
+	wstring strUser, strCurrentVirtual, strNewVirtual, strRnFr;
 	DWORD dw, dwRestOffset=0;
 	bool isLoggedIn = false;
 	HANDLE hFile;
@@ -729,11 +731,11 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 	LookupHost(saiCmdPeer.sin_addr, szPeerName, 64);
 
 	// Log incoming connection
-	sprintf_s(szOutput, "[%u] Incoming connection from %s:%u.", sCmd, szPeerName, ntohs(saiCmdPeer.sin_port));
+	swprintf_s(szOutput, L"[%u] Incoming connection from %S:%u.", sCmd, szPeerName, ntohs(saiCmdPeer.sin_port));
 	pLog->Log(szOutput);
 
 	// Send greeting
-	sprintf_s(szOutput, "220-%s\r\n220-You are connecting from %s:%u.\r\n220 Proceed with login.\r\n", SERVERID, szPeerName, ntohs(saiCmdPeer.sin_port));
+	swprintf_s(szOutput, L"220-%s\r\n220-You are connecting from %S:%u.\r\n220 Proceed with login.\r\n", SERVERID, szPeerName, ntohs(saiCmdPeer.sin_port));
 	SocketSendString(sCmd, szOutput);
 
 	// Get host address
@@ -747,180 +749,180 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 
 		if (dw==-1) {
 			// Connection dropped or timed out
-			SocketSendString(sCmd,"421 Connection timed out.\r\n");
+			SocketSendString(sCmd,L"421 Connection timed out.\r\n");
 			break;
 		} else if (dw>511) {
-			SocketSendString(sCmd,"500 Command line too long.\r\n");
+			SocketSendString(sCmd,L"500 Command line too long.\r\n");
 			continue;
 		}
 
-		if (pszParam = strchr(szCmd, ' ')) *(pszParam++) = 0;
-		else pszParam = szCmd+strlen(szCmd);
+		if (pszParam = wcschr(szCmd, L' ')) *(pszParam++) = 0;
+		else pszParam = szCmd+wcslen(szCmd);
 
-		if (!_stricmp(szCmd, "USER")) {
+		if (!_wcsicmp(szCmd, L"USER")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 				continue;
 			} else if (isLoggedIn) {
-				SocketSendString(sCmd, "503 Already logged in. Use REIN to change users.\r\n");
+				SocketSendString(sCmd, L"503 Already logged in. Use REIN to change users.\r\n");
 				continue;
 			} else {
 				strUser = pszParam;
-				if (pUsers->CheckPassword(strUser.c_str(), "")) {
-					strcpy_s(szCmd, "PASS");
+				if (pUsers->CheckPassword(strUser.c_str(), L"")) {
+					wcscpy_s(szCmd, L"PASS");
 					szCmd[5] = 0;
 				} else {
-					sprintf_s(szOutput, "331 Need password for user \"%s\".\r\n", strUser.c_str());
+					swprintf_s(szOutput, L"331 Need password for user \"%s\".\r\n", strUser.c_str());
 					SocketSendString(sCmd, szOutput);
 					continue;
 				}
 			}
 		}
 
-		if (!_stricmp(szCmd, "PASS")) {
+		if (!_wcsicmp(szCmd, L"PASS")) {
 			if (strUser.empty()) {
-				SocketSendString(sCmd, "503 Bad sequence of commands. Send USER first.\r\n");
+				SocketSendString(sCmd, L"503 Bad sequence of commands. Send USER first.\r\n");
 			} else if (isLoggedIn) {
-				SocketSendString(sCmd, "503 Already logged in. Use REIN to change users.\r\n");
+				SocketSendString(sCmd, L"503 Already logged in. Use REIN to change users.\r\n");
 			} else {
 				if (pUsers->CheckPassword(strUser.c_str(), pszParam)) {
 					if (CanUserLogin(strUser.c_str(), saiCmdPeer.sin_addr)) {
 						isLoggedIn = true;
 						dwActiveConnections++;
-						strCurrentVirtual = "/";
-						sprintf_s(szOutput, "230 User \"%s\" logged in.\r\n", strUser.c_str());
+						strCurrentVirtual = L"/";
+						swprintf_s(szOutput, L"230 User \"%s\" logged in.\r\n", strUser.c_str());
 						SocketSendString(sCmd, szOutput);
-						sprintf_s(szOutput, "[%u] User \"%s\" logged in.", sCmd, strUser.c_str());
+						swprintf_s(szOutput, L"[%u] User \"%s\" logged in.", sCmd, strUser.c_str());
 						pLog->Log(szOutput);
 						pVFS = pUsers->GetVFS(strUser.c_str());
 						pPerms = pUsers->GetPermDB(strUser.c_str());
 					} else {
-						SocketSendString(sCmd, "421 Your login was refused due to a server connection limit.\r\n");
-						sprintf_s(szOutput, "[%u] Login for user \"%s\" refused due to connection limit.", sCmd, strUser.c_str());
+						SocketSendString(sCmd, L"421 Your login was refused due to a server connection limit.\r\n");
+						swprintf_s(szOutput, L"[%u] Login for user \"%s\" refused due to connection limit.", sCmd, strUser.c_str());
 						pLog->Log(szOutput);
 						break;
 					}
 				} else {
-					SocketSendString(sCmd,"530 Incorrect password.\r\n");
+					SocketSendString(sCmd,L"530 Incorrect password.\r\n");
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "REIN")) {
+		else if (!_wcsicmp(szCmd, L"REIN")) {
 			if (isLoggedIn) {
 				isLoggedIn = false;
 				dwActiveConnections--;
-				sprintf_s(szOutput, "220-User \"%s\" logged out.\r\n", strUser.c_str());
+				swprintf_s(szOutput, L"220-User \"%s\" logged out.\r\n", strUser.c_str());
 				SocketSendString(sCmd, szOutput);
-				sprintf_s(szOutput, "[%u] User \"%s\" logged out.", sCmd, strUser.c_str());
+				swprintf_s(szOutput, L"[%u] User \"%s\" logged out.", sCmd, strUser.c_str());
 				pLog->Log(szOutput);
 				strUser.clear();
 			}
-			SocketSendString(sCmd, "220 REIN command successful.\r\n");
+			SocketSendString(sCmd, L"220 REIN command successful.\r\n");
 		}
 
-		else if (!_stricmp(szCmd, "HELP")) {
-			SocketSendString(sCmd, "214 For help, please visit www.whitsoftdev.com.\r\n");
+		else if (!_wcsicmp(szCmd, L"HELP")) {
+			SocketSendString(sCmd, L"214 For help, please visit www.whitsoftdev.com.\r\n");
 		}
 
-		else if (!_stricmp(szCmd, "FEAT")) {
-			SocketSendString(sCmd, "211-Extensions supported:\r\n SIZE\r\n REST STREAM\r\n MDTM\r\n TVFS\r\n211 END\r\n");
+		else if (!_wcsicmp(szCmd, L"FEAT")) {
+			SocketSendString(sCmd, L"211-Extensions supported:\r\n SIZE\r\n REST STREAM\r\n MDTM\r\n TVFS\r\n UTF8\r\n211 END\r\n");
 		}
 
-		else if (!_stricmp(szCmd, "SYST")) {
-			sprintf_s(szOutput, "215 WIN32 Type: L8 Version: %s\r\n", SERVERID);
+		else if (!_wcsicmp(szCmd, L"SYST")) {
+			swprintf_s(szOutput, L"215 WIN32 Type: L8 Version: %s\r\n", SERVERID);
 			SocketSendString(sCmd, szOutput);
 		}
 
-		else if (!_stricmp(szCmd, "QUIT")) {
+		else if (!_wcsicmp(szCmd, L"QUIT")) {
 			if (isLoggedIn) {
 				isLoggedIn = false;
 				dwActiveConnections--;
-				sprintf_s(szOutput, "221-User \"%s\" logged out.\r\n", strUser.c_str());
+				swprintf_s(szOutput, L"221-User \"%s\" logged out.\r\n", strUser.c_str());
 				SocketSendString(sCmd, szOutput);
-				sprintf_s(szOutput, "[%u] User \"%s\" logged out.", sCmd, strUser.c_str());
+				swprintf_s(szOutput, L"[%u] User \"%s\" logged out.", sCmd, strUser.c_str());
 				pLog->Log(szOutput);
 			}
-			SocketSendString(sCmd, "221 Goodbye!\r\n");
+			SocketSendString(sCmd, L"221 Goodbye!\r\n");
 			break;
 		}
 
-		else if (!_stricmp(szCmd, "NOOP")) {
-			SocketSendString(sCmd, "200 NOOP command successful.\r\n");
+		else if (!_wcsicmp(szCmd, L"NOOP")) {
+			SocketSendString(sCmd, L"200 NOOP command successful.\r\n");
 		}
 
-		else if (!_stricmp(szCmd, "PWD") || !_stricmp(szCmd, "XPWD")) {
+		else if (!_wcsicmp(szCmd, L"PWD") || !_wcsicmp(szCmd, L"XPWD")) {
 			if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
-				sprintf_s(szOutput, "257 \"%s\" is current directory.\r\n", strCurrentVirtual.c_str());
+				swprintf_s(szOutput, L"257 \"%s\" is current directory.\r\n", strCurrentVirtual.c_str());
 				SocketSendString(sCmd, szOutput);
 			}
 		}
 
-		else if (!_stricmp(szCmd, "CWD") || !_stricmp(szCmd, "XCWD")) {
+		else if (!_wcsicmp(szCmd, L"CWD") || !_wcsicmp(szCmd, L"XCWD")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pVFS->IsFolder(strNewVirtual.c_str())) {
 					strCurrentVirtual = strNewVirtual;
-					sprintf_s(szOutput, "250 \"%s\" is now current directory.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"250 \"%s\" is now current directory.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Path not found.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Path not found.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "CDUP") || !_stricmp(szCmd, "XCUP")) {
+		else if (!_wcsicmp(szCmd, L"CDUP") || !_wcsicmp(szCmd, L"XCUP")) {
 			if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
-				pVFS->ResolveRelative(strCurrentVirtual.c_str(), "..", strNewVirtual);
+				pVFS->ResolveRelative(strCurrentVirtual.c_str(), L"..", strNewVirtual);
 				strCurrentVirtual = strNewVirtual;
-				sprintf_s(szOutput,"250 \"%s\" is now current directory.\r\n", strCurrentVirtual.c_str());
+				swprintf_s(szOutput,L"250 \"%s\" is now current directory.\r\n", strCurrentVirtual.c_str());
 				SocketSendString(sCmd, szOutput);
 			}
 		}
 
-		else if (!_stricmp(szCmd,"TYPE")) {
+		else if (!_wcsicmp(szCmd,L"TYPE")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
-				SocketSendString(sCmd, "200 TYPE command successful.\r\n");
+				SocketSendString(sCmd, L"200 TYPE command successful.\r\n");
 			}
 		}
 
-		else if (!_stricmp(szCmd, "REST")) {
-			if (!*pszParam || (!(dw = StrToInt(pszParam)) && (*pszParam!='0'))) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+		else if (!_wcsicmp(szCmd, L"REST")) {
+			if (!*pszParam || (!(dw = StrToInt(pszParam)) && (*pszParam!=L'0'))) {
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				dwRestOffset = dw;
-				sprintf_s(szOutput, "350 Ready to resume transfer at %u bytes.\r\n", dwRestOffset);
+				swprintf_s(szOutput, L"350 Ready to resume transfer at %u bytes.\r\n", dwRestOffset);
 				SocketSendString(sCmd, szOutput);
 			}
 		}
 
-		else if (!_stricmp(szCmd, "PORT")) {
+		else if (!_wcsicmp(szCmd, L"PORT")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				ZeroMemory(&saiData, sizeof(SOCKADDR_IN));
 				saiData.sin_family = AF_INET;
 				for (dw = 0; dw < 6; dw++) {
 					if (dw < 4) ((unsigned char *)&saiData.sin_addr)[dw] = (unsigned char)StrToInt(pszParam);
 					else ((unsigned char *)&saiData.sin_port)[dw-4] = (unsigned char)StrToInt(pszParam);
-					if (!(pszParam = strchr(pszParam, ','))) break;
+					if (!(pszParam = wcschr(pszParam, L','))) break;
 					pszParam++;
 				}
 				if (dw == 5) {
@@ -928,17 +930,17 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 						closesocket(sPasv);
 						sPasv = 0;
 					}
-					SocketSendString(sCmd, "200 PORT command successful.\r\n");
+					SocketSendString(sCmd, L"200 PORT command successful.\r\n");
 				} else {
-					SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+					SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 					ZeroMemory(&saiData, sizeof(SOCKADDR_IN));
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "PASV")) {
+		else if (!_wcsicmp(szCmd, L"PASV")) {
 			if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				if (sPasv) closesocket(sPasv);
 				ZeroMemory(&saiPasv, sizeof(SOCKADDR_IN));
@@ -950,16 +952,16 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 				listen(sPasv, 1);
 				dw = sizeof(SOCKADDR_IN);
 				getsockname(sPasv, (SOCKADDR *)&saiPasv, (int *)&dw);
-				sprintf_s(szOutput, "227 Entering Passive Mode (%u,%u,%u,%u,%u,%u)\r\n", saiCmd.sin_addr.S_un.S_un_b.s_b1, saiCmd.sin_addr.S_un.S_un_b.s_b2, saiCmd.sin_addr.S_un.S_un_b.s_b3, saiCmd.sin_addr.S_un.S_un_b.s_b4, ((unsigned char *)&saiPasv.sin_port)[0], ((unsigned char *)&saiPasv.sin_port)[1]);
+				swprintf_s(szOutput, L"227 Entering Passive Mode (%u,%u,%u,%u,%u,%u)\r\n", saiCmd.sin_addr.S_un.S_un_b.s_b1, saiCmd.sin_addr.S_un.S_un_b.s_b2, saiCmd.sin_addr.S_un.S_un_b.s_b3, saiCmd.sin_addr.S_un.S_un_b.s_b4, ((unsigned char *)&saiPasv.sin_port)[0], ((unsigned char *)&saiPasv.sin_port)[1]);
 				SocketSendString(sCmd, szOutput);
 			}
 		}
 
-		else if (!_stricmp(szCmd, "LIST") || !_stricmp(szCmd, "NLST")) {
+		else if (!_wcsicmp(szCmd, L"LIST") || !_wcsicmp(szCmd, L"NLST")) {
 			if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
-				if (*pszParam == '-') if (pszParam = strchr(pszParam, ' ')) pszParam++;
+				if (*pszParam == L'-') if (pszParam = wcschr(pszParam, L' ')) pszParam++;
 				if (pszParam && *pszParam) {
 					pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				}
@@ -967,38 +969,38 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 					strNewVirtual = strCurrentVirtual;
 				}
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_LIST) == 1) {
-					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), strcmp(szCmd, "LIST"), listing)) {
-						sprintf_s(szOutput, "150 Opening %s mode data connection for listing of \"%s\".\r\n", sPasv ? "passive" : "active", strNewVirtual.c_str());
+					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), wcscmp(szCmd, L"LIST"), listing)) {
+						swprintf_s(szOutput, L"150 Opening %s mode data connection for listing of \"%s\".\r\n", sPasv ? L"passive" : L"active", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 						sData = EstablishDataConnection(&saiData, &sPasv);
-						if (sData) {
+						if (sData!=INVALID_SOCKET) {
 							for (VFS::listing_type::const_iterator it = listing.begin(); it != listing.end(); ++it) {
 								SocketSendString(sData, it->second.c_str());
 							}
 							listing.clear();
 							closesocket(sData);
-							sprintf_s(szOutput, "226 %s command successful.\r\n", _stricmp(szCmd, "NLST") ? "LIST" : "NLST");
+							swprintf_s(szOutput, L"226 %s command successful.\r\n", _wcsicmp(szCmd, L"NLST") ? L"LIST" : L"NLST");
 							SocketSendString(sCmd, szOutput);
 						} else {
 							listing.clear();
-							SocketSendString(sCmd, "425 Can't open data connection.\r\n");
+							SocketSendString(sCmd, L"425 Can't open data connection.\r\n");
 						}
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": Path not found.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Path not found.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": List permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": List permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "STAT")) {
+		else if (!_wcsicmp(szCmd, L"STAT")) {
 			if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
-				if (*pszParam == '-') if (pszParam = strchr(pszParam, ' ')) pszParam++;
+				if (*pszParam == L'-') if (pszParam = wcschr(pszParam, L' ')) pszParam++;
 				if (pszParam && *pszParam) {
 					pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				}
@@ -1007,85 +1009,85 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 				}
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_LIST) == 1) {
 					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), 1, listing)) {
-						sprintf_s(szOutput, "212-Sending directory listing of \"%s\".\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"212-Sending directory listing of \"%s\".\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd,szOutput);
 						for (VFS::listing_type::const_iterator it = listing.begin(); it != listing.end(); ++it) {
 							SocketSendString(sCmd, it->second.c_str());
 						}
 						listing.clear();
-						SocketSendString(sCmd, "212 STAT command successful.\r\n");
+						SocketSendString(sCmd, L"212 STAT command successful.\r\n");
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": Path not found.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Path not found.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					sprintf_s(szOutput ,"550 \"%s\": List permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput ,L"550 \"%s\": List permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "RETR")) {
+		else if (!_wcsicmp(szCmd, L"RETR")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_READ) == 1) {
 					hFile = pVFS->CreateFile(strNewVirtual.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING);
 					if (hFile == INVALID_HANDLE_VALUE) {
-						sprintf_s(szOutput, "550 \"%s\": Unable to open file.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Unable to open file.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					} else {
 						if (dwRestOffset) {
 							SetFilePointer(hFile, dwRestOffset, 0, FILE_BEGIN);
 							dwRestOffset = 0;
 						}
-						sprintf_s(szOutput, "150 Opening %s mode data connection for \"%s\".\r\n", sPasv ? "passive" : "active", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"150 Opening %s mode data connection for \"%s\".\r\n", sPasv ? L"passive" : L"active", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 						sData = EstablishDataConnection(&saiData, &sPasv);
-						if (sData) {
-							sprintf_s(szOutput, "[%u] User \"%s\" began downloading \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
+						if (sData!=INVALID_SOCKET) {
+							swprintf_s(szOutput, L"[%u] User \"%s\" began downloading \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 							pLog->Log(szOutput);
 							if (DoSocketFileIO(sCmd, sData, hFile, SOCKET_FILE_IO_DIRECTION_SEND, &dw)) {
-								sprintf_s(szOutput, "226 \"%s\" transferred successfully.\r\n", strNewVirtual.c_str());
+								swprintf_s(szOutput, L"226 \"%s\" transferred successfully.\r\n", strNewVirtual.c_str());
 								SocketSendString(sCmd, szOutput);
-								sprintf_s(szOutput, "[%u] Download completed.", sCmd);
+								swprintf_s(szOutput, L"[%u] Download completed.", sCmd);
 								pLog->Log(szOutput);
 							} else {
-								SocketSendString(sCmd, "426 Connection closed; transfer aborted.\r\n");
-								if (dw) SocketSendString(sCmd, "226 ABOR command successful.\r\n");
-								sprintf_s(szOutput, "[%u] Download aborted.", sCmd);
+								SocketSendString(sCmd, L"426 Connection closed; transfer aborted.\r\n");
+								if (dw) SocketSendString(sCmd, L"226 ABOR command successful.\r\n");
+								swprintf_s(szOutput, L"[%u] Download aborted.", sCmd);
 								pLog->Log(szOutput);
 							}
 							closesocket(sData);
 						} else {
-							SocketSendString(sCmd,"425 Can't open data connection.\r\n");
+							SocketSendString(sCmd,L"425 Can't open data connection.\r\n");
 						}
 						CloseHandle(hFile);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Read permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Read permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "STOR") || !_stricmp(szCmd, "APPE")) {
+		else if (!_wcsicmp(szCmd, L"STOR") || !_wcsicmp(szCmd, L"APPE")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd,"501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd,L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd,"530 Not logged in.\r\n");
+				SocketSendString(sCmd,L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_WRITE) == 1) {
 					hFile = pVFS->CreateFile(strNewVirtual.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_ALWAYS);
 					if (hFile == INVALID_HANDLE_VALUE) {
-						sprintf_s(szOutput, "550 \"%s\": Unable to open file.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Unable to open file.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					} else {
-						if (_stricmp(szCmd, "APPE") == 0) {
+						if (_wcsicmp(szCmd, L"APPE") == 0) {
 							SetFilePointer(hFile, 0, 0, FILE_END);
 						}
 						else {
@@ -1093,93 +1095,93 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 							SetEndOfFile(hFile);
 						}
 						dwRestOffset = 0;
-						sprintf_s(szOutput, "150 Opening %s mode data connection for \"%s\".\r\n", sPasv ? "passive" : "active", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"150 Opening %s mode data connection for \"%s\".\r\n", sPasv ? L"passive" : L"active", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 						sData = EstablishDataConnection(&saiData, &sPasv);
-						if (sData) {
-							sprintf_s(szOutput, "[%u] User \"%s\" began uploading \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
+						if (sData!=INVALID_SOCKET) {
+							swprintf_s(szOutput, L"[%u] User \"%s\" began uploading \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 							pLog->Log(szOutput);
 							if (DoSocketFileIO(sCmd, sData, hFile, SOCKET_FILE_IO_DIRECTION_RECEIVE, 0)) {
-								sprintf_s(szOutput, "226 \"%s\" transferred successfully.\r\n", strNewVirtual.c_str());
+								swprintf_s(szOutput, L"226 \"%s\" transferred successfully.\r\n", strNewVirtual.c_str());
 								SocketSendString(sCmd, szOutput);
-								sprintf_s(szOutput, "[%u] Upload completed.", sCmd);
+								swprintf_s(szOutput, L"[%u] Upload completed.", sCmd);
 								pLog->Log(szOutput);
 							} else {
-								SocketSendString(sCmd, "426 Connection closed; transfer aborted.\r\n");
-								sprintf_s(szOutput, "[%u] Upload aborted.", sCmd);
+								SocketSendString(sCmd, L"426 Connection closed; transfer aborted.\r\n");
+								swprintf_s(szOutput, L"[%u] Upload aborted.", sCmd);
 								pLog->Log(szOutput);
 							}
 							closesocket(sData);
 						} else {
-							SocketSendString(sCmd,"425 Can't open data connection.\r\n");
+							SocketSendString(sCmd,L"425 Can't open data connection.\r\n");
 						}
 						CloseHandle(hFile);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Write permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Write permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "ABOR")) {
+		else if (!_wcsicmp(szCmd, L"ABOR")) {
 			if (sPasv) {
 				closesocket(sPasv);
 				sPasv = 0;
 			}
 			dwRestOffset = 0;
-			SocketSendString(sCmd,"200 ABOR command successful.\r\n");
+			SocketSendString(sCmd,L"200 ABOR command successful.\r\n");
 		}
 
-		else if (!_stricmp(szCmd, "SIZE")) {
+		else if (!_wcsicmp(szCmd, L"SIZE")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_READ) == 1) {
 					hFile = pVFS->CreateFile(strNewVirtual.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING);
 					if (hFile == INVALID_HANDLE_VALUE) {
-						sprintf_s(szOutput, "550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					} else {
-						sprintf_s(szOutput, "213 %u\r\n", GetFileSize(hFile, 0));
+						swprintf_s(szOutput, L"213 %u\r\n", GetFileSize(hFile, 0));
 						SocketSendString(sCmd, szOutput);
 						CloseHandle(hFile);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Read permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Read permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "MDTM")) {
+		else if (!_wcsicmp(szCmd, L"MDTM")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				for (i = 0; i < 14; i++) {
-					if ((pszParam[i] < '0') || (pszParam[i] > '9')) {
+					if ((pszParam[i] < L'0') || (pszParam[i] > L'9')) {
 						break;
 					}
 				}
-				if ((i == 14) && (pszParam[14] == ' ')) {
-					strncpy_s(szOutput, pszParam, 4);
+				if ((i == 14) && (pszParam[14] == L' ')) {
+					wcsncpy_s(szOutput, pszParam, 4);
 					szOutput[4] = 0;
 					st.wYear = StrToInt(szOutput);
-					strncpy_s(szOutput, pszParam + 4, 2);
+					wcsncpy_s(szOutput, pszParam + 4, 2);
 					szOutput[2] = 0;
 					st.wMonth = StrToInt(szOutput);
-					strncpy_s(szOutput, pszParam + 6, 2);
+					wcsncpy_s(szOutput, pszParam + 6, 2);
 					st.wDay = StrToInt(szOutput);
-					strncpy_s(szOutput, pszParam + 8, 2);
+					wcsncpy_s(szOutput, pszParam + 8, 2);
 					st.wHour = StrToInt(szOutput);
-					strncpy_s(szOutput, pszParam + 10, 2);
+					wcsncpy_s(szOutput, pszParam + 10, 2);
 					st.wMinute = StrToInt(szOutput);
-					strncpy_s(szOutput, pszParam + 12, 2);
+					wcsncpy_s(szOutput, pszParam + 12, 2);
 					st.wSecond = StrToInt(szOutput);
 					pszParam += 15;
 					dw = 1;
@@ -1191,166 +1193,176 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 					if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_WRITE) == 1) {
 						hFile = pVFS->CreateFile(strNewVirtual.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING);
 						if (hFile == INVALID_HANDLE_VALUE) {
-							sprintf_s(szOutput, "550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
+							swprintf_s(szOutput, L"550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
 							SocketSendString(sCmd, szOutput);
 						} else {
 							SystemTimeToFileTime(&st, &ft);
 							SetFileTime(hFile, 0, 0, &ft);
 							CloseHandle(hFile);
-							SocketSendString(sCmd, "250 MDTM command successful.\r\n");
+							SocketSendString(sCmd, L"250 MDTM command successful.\r\n");
 						}
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": Write permission denied.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Write permission denied.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
 					if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_READ) == 1) {
 						hFile = pVFS->CreateFile(strNewVirtual.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING);
 						if (hFile == INVALID_HANDLE_VALUE) {
-							sprintf_s(szOutput, "550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
+							swprintf_s(szOutput, L"550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
 							SocketSendString(sCmd, szOutput);
 						} else {
 							GetFileTime(hFile, 0, 0, &ft);
 							CloseHandle(hFile);
 							FileTimeToSystemTime(&ft, &st);
-							sprintf_s(szOutput, "213 %04u%02u%02u%02u%02u%02u\r\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+							swprintf_s(szOutput, L"213 %04u%02u%02u%02u%02u%02u\r\n", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 							SocketSendString(sCmd, szOutput);
 						}
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": Read permission denied.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Read permission denied.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "DELE")) {
+		else if (!_wcsicmp(szCmd, L"DELE")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_ADMIN) == 1) {
 					if (pVFS->FileExists(strNewVirtual.c_str())) {
 						if (pVFS->DeleteFile(strNewVirtual.c_str())) {
-							sprintf_s(szOutput, "250 \"%s\" deleted successfully.\r\n", strNewVirtual.c_str());
+							swprintf_s(szOutput, L"250 \"%s\" deleted successfully.\r\n", strNewVirtual.c_str());
 							SocketSendString(sCmd, szOutput);
-							sprintf_s(szOutput, "[%u] User \"%s\" deleted \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
+							swprintf_s(szOutput, L"[%u] User \"%s\" deleted \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 							pLog->Log(szOutput);
 						} else {
-							sprintf_s(szOutput, "550 \"%s\": Unable to delete file.\r\n", strNewVirtual.c_str());
+							swprintf_s(szOutput, L"550 \"%s\": Unable to delete file.\r\n", strNewVirtual.c_str());
 							SocketSendString(sCmd, szOutput);
 						}
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Admin permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Admin permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd,szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "RNFR")) {
+		else if (!_wcsicmp(szCmd, L"RNFR")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_ADMIN) == 1) {
 					if (pVFS->FileExists(strNewVirtual.c_str())) {
 						strRnFr = strNewVirtual;
-						sprintf_s(szOutput, "350 \"%s\": File exists; proceed with RNTO.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"350 \"%s\": File exists; proceed with RNTO.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": File not found.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Admin permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Admin permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "RNTO")) {
+		else if (!_wcsicmp(szCmd, L"RNTO")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else if (strRnFr.length() == 0) {
-				SocketSendString(sCmd, "503 Bad sequence of commands. Send RNFR first.\r\n");
+				SocketSendString(sCmd, L"503 Bad sequence of commands. Send RNFR first.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_ADMIN) == 1) {
 					if (pVFS->MoveFile(strRnFr.c_str(), strNewVirtual.c_str())) {
-						SocketSendString(sCmd, "250 RNTO command successful.\r\n");
-						sprintf_s(szOutput, "[%u] User \"%s\" renamed \"%s\" to \"%s\".", sCmd, strUser.c_str(), strRnFr.c_str(), strNewVirtual.c_str());
+						SocketSendString(sCmd, L"250 RNTO command successful.\r\n");
+						swprintf_s(szOutput, L"[%u] User \"%s\" renamed \"%s\" to \"%s\".", sCmd, strUser.c_str(), strRnFr.c_str(), strNewVirtual.c_str());
 						pLog->Log(szOutput);
 						strRnFr.clear();
 					} else {
-						sprintf_s(szOutput, "553 \"%s\": Unable to rename file.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"553 \"%s\": Unable to rename file.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					SocketSendString(sCmd, "550 Admin permission denied.\r\n");
+					SocketSendString(sCmd, L"550 Admin permission denied.\r\n");
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "MKD") || !_stricmp(szCmd, "XMKD")) {
+		else if (!_wcsicmp(szCmd, L"MKD") || !_wcsicmp(szCmd, L"XMKD")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_WRITE) == 1) {
 					if (pVFS->CreateDirectory(strNewVirtual.c_str())) {
-						sprintf_s(szOutput, "250 \"%s\" created successfully.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"250 \"%s\" created successfully.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
-						sprintf_s(szOutput, "[%u] User \"%s\" created directory \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
+						swprintf_s(szOutput, L"[%u] User \"%s\" created directory \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 						pLog->Log(szOutput);
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": Unable to create directory.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Unable to create directory.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Write permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Write permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
 
-		else if (!_stricmp(szCmd, "RMD") || !_stricmp(szCmd, "XRMD")) {
+		else if (!_wcsicmp(szCmd, L"RMD") || !_wcsicmp(szCmd, L"XRMD")) {
 			if (!*pszParam) {
-				SocketSendString(sCmd, "501 Syntax error in parameters or arguments.\r\n");
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
 			} else if (!isLoggedIn) {
-				SocketSendString(sCmd, "530 Not logged in.\r\n");
+				SocketSendString(sCmd, L"530 Not logged in.\r\n");
 			} else {
 				pVFS->ResolveRelative(strCurrentVirtual.c_str(), pszParam, strNewVirtual);
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_ADMIN) == 1) {
 					if (pVFS->RemoveDirectory(strNewVirtual.c_str())) {
-						sprintf_s(szOutput, "250 \"%s\" removed successfully.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"250 \"%s\" removed successfully.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
-						sprintf_s(szOutput, "[%u] User \"%s\" removed directory \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
+						swprintf_s(szOutput, L"[%u] User \"%s\" removed directory \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 						pLog->Log(szOutput);
 					} else {
-						sprintf_s(szOutput, "550 \"%s\": Unable to remove directory.\r\n", strNewVirtual.c_str());
+						swprintf_s(szOutput, L"550 \"%s\": Unable to remove directory.\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 					}
 				} else {
-					sprintf_s(szOutput, "550 \"%s\": Admin permission denied.\r\n", strNewVirtual.c_str());
+					swprintf_s(szOutput, L"550 \"%s\": Admin permission denied.\r\n", strNewVirtual.c_str());
 					SocketSendString(sCmd, szOutput);
 				}
 			}
 		}
+		
+		else if (!_wcsicmp(szCmd, L"OPTS")) {
+			if (!*pszParam) {
+				SocketSendString(sCmd, L"501 Syntax error in parameters or arguments.\r\n");
+			} else if (!_wcsicmp(pszParam, L"UTF8 On")) {
+				SocketSendString(sCmd, L"200 Always in UTF8 mode.\r\n");
+			} else {
+				SocketSendString(sCmd, L"501 Option not understood.\r\n");
+			}
+		}
 
 		else {
-			sprintf_s(szOutput,"500 Syntax error, command \"%s\" unrecognized.\r\n",szCmd);
+			swprintf_s(szOutput,L"500 Syntax error, command \"%s\" unrecognized.\r\n",szCmd);
 			SocketSendString(sCmd,szOutput);
 		}
 
@@ -1363,40 +1375,96 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 		dwActiveConnections--;
 	}
 
-	sprintf_s(szOutput,"[%u] Connection closed.",sCmd);
+	swprintf_s(szOutput,L"[%u] Connection closed.",sCmd);
 	pLog->Log(szOutput);
 
 	return false;
 }
 
-bool SocketSendString(SOCKET s, const char *psz)
+bool SocketSendString(SOCKET s, const wchar_t *psz)
 {
-	if (send(s,psz,(INT)strlen(psz),0)==SOCKET_ERROR) return false;
-	else return true;
+	int nWideSize = wcslen(psz);
+	int nUtf8Size;
+	char *buf;
+	bool bSuccess = false;
+
+	nUtf8Size = WideCharToMultiByte(CP_UTF8, 0, psz, nWideSize, NULL, 0, NULL, NULL);
+	if (nUtf8Size==0) return false;
+
+	buf = new char[nUtf8Size];
+	nUtf8Size = WideCharToMultiByte(CP_UTF8, 0, psz, nWideSize, buf, nUtf8Size, NULL, NULL);
+	if(nUtf8Size != 0) {
+		bSuccess = send(s, buf, nUtf8Size, 0)!=SOCKET_ERROR;
+	}
+	delete[] buf;
+	return bSuccess;
 }
 
-DWORD SocketReceiveString(SOCKET s, char *psz, DWORD dwMaxChars)
+DWORD SocketReceiveString(SOCKET s, wchar_t *psz, DWORD dwMaxChars)
 {
-	DWORD dw, dwBytes;
-	TIMEVAL tv;
-	fd_set fds;
+	DWORD dwChars;
 
-	tv.tv_sec=dwCommandTimeout;
-	tv.tv_usec=0;
-	for (dwBytes=0;;dwBytes++) {
-		FD_ZERO(&fds);
-		FD_SET(s,&fds);
-		dw=select(0,&fds,0,0,&tv);
-		if (dw==SOCKET_ERROR || dw==0) return -1; // Timeout
-		dw=recv(s,psz,1,0);
-		if (dw==SOCKET_ERROR || dw==0) return -1; // Network error
+	for (dwChars=0;;dwChars++) {
+		if(!SocketReceiveLetter(s, psz)) {
+			return -1; // Timeout or network error
+		}
 		if (*psz=='\r') *psz=0;
 		else if (*psz=='\n') {
 			*psz=0;
-			return dwBytes;
+			return dwChars;
 		}
-		if (dwBytes<dwMaxChars) psz++;
+		if (dwChars<dwMaxChars) psz++;
 	}
+}
+
+bool SocketReceiveLetter(SOCKET s, wchar_t *pch)
+{
+	char buf[4];
+	DWORD dwCharLength;
+	DWORD dw;
+	TIMEVAL tv;
+	fd_set fds;
+
+	tv.tv_sec = dwCommandTimeout;
+	tv.tv_usec = 0;
+	FD_ZERO(&fds);
+	FD_SET(s, &fds);
+	dw = select(0, &fds, 0, 0, &tv);
+	if (dw == SOCKET_ERROR || dw == 0) return false; // Timeout
+
+	dw = recv(s, &buf[0], 1, 0);
+	if (dw == SOCKET_ERROR || dw == 0) return false; // Network error
+
+	if ((buf[0] & 0x80) == 0x00) { // 0xxxxxxx
+		dwCharLength = 1;
+	} else if ((buf[0] & 0xE0) == 0xC0) { // 110xxxxx
+		dwCharLength = 2;
+	} else if ((buf[0] & 0xF0) == 0xE0) { // 1110xxxx
+		dwCharLength = 3;
+	} else if ((buf[0] & 0xF8) == 0xF0) { // 11110xxx
+		dwCharLength = 4;
+	} else {
+		// The input is invalid
+		dwCharLength = 0;
+	}
+
+	if (dwCharLength > 1) {
+		dw = recv(s, &buf[1], dwCharLength-1, 0);
+		if (dw == SOCKET_ERROR || dw == 0) return false; // Network error
+	}
+
+	if (dwCharLength > 0) {
+		if (MultiByteToWideChar(CP_UTF8, 0, buf, dwCharLength, pch, 1) != 1) {
+			dwCharLength = 0;
+		}
+	}
+
+	if (dwCharLength == 0) {
+		// The input byte sequence is invalid, return REPLACEMENT CHARACTER (U+FFFD)
+		*pch = 0xFFFD;
+	}
+
+	return true;
 }
 
 DWORD SocketReceiveData(SOCKET s, char *psz, DWORD dwBytesToRead)
@@ -1442,7 +1510,7 @@ SOCKET EstablishDataConnection(SOCKADDR_IN *psaiData, SOCKET *psPasv)
 		sData=socket(AF_INET,SOCK_STREAM, IPPROTO_TCP);
 		if (connect(sData,(SOCKADDR *)psaiData,sizeof(SOCKADDR_IN))) {
 			closesocket(sData);
-			return false;
+			return INVALID_SOCKET;
 		} else {
 			return sData;
 		}
@@ -1468,6 +1536,7 @@ void LookupHost(IN_ADDR ia, char *pszHostName, size_t stHostName)
 bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, DWORD *pdwAbortFlag)
 {
 	char szBuffer[PACKET_SIZE];
+	wchar_t szCmd[512];
 	DWORD dw;
 
 	if (pdwAbortFlag) *pdwAbortFlag = 0;
@@ -1479,12 +1548,14 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, 
 			if (send(sData, szBuffer, dw, 0) == SOCKET_ERROR) return false;
 			ioctlsocket(sCmd, FIONREAD, &dw);
 			if (dw) {
-				SocketReceiveString(sCmd, szBuffer, 511);
-				if (!_stricmp(szBuffer, "ABOR")) {
-					*pdwAbortFlag = 1;
-					return false;
-				} else {
-					SocketSendString(sCmd, "500 Only command allowed at this time is ABOR.\r\n");
+				dw = SocketReceiveString(sCmd, szCmd, 511);
+				if (dw != -1 && dw <= 511) {
+					if (!_wcsicmp(szCmd, L"ABOR")) {
+						*pdwAbortFlag = 1;
+						return false;
+					} else {
+						SocketSendString(sCmd, L"500 Only command allowed at this time is ABOR.\r\n");
+					}
 				}
 			}
 		}
@@ -1502,7 +1573,7 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, 
 	}
 }
 
-DWORD FileReadLine(HANDLE hFile, char *pszBuf, DWORD dwBufLen)
+DWORD FileReadLine(HANDLE hFile, wchar_t *pszBuf, DWORD dwBufLen)
 {
 // Reads a line from an open text file into a character buffer, discarding the
 // trailing CR/LF, up to dwBufLen bytes. Any additional bytes are discarded.
@@ -1514,10 +1585,10 @@ DWORD FileReadLine(HANDLE hFile, char *pszBuf, DWORD dwBufLen)
 	DWORD dw, dwBytesRead, dwCount;
 
 	for (dwCount=0;;) {
-		dw=ReadFile(hFile,pszBuf,1,&dwBytesRead,0);
+		dw=ReadFile(hFile,pszBuf,sizeof(wchar_t),&dwBytesRead,0);
 		if (!dw || (dw && !dwBytesRead && !dwCount)) return -1;
-		if (!dwBytesRead || *pszBuf=='\n') break;
-		if (*pszBuf!='\r') {
+		if (dwBytesRead!=sizeof(wchar_t) || *pszBuf==L'\n') break;
+		if (*pszBuf!=L'\r') {
 			dwCount++;
 			if (dwCount<dwBufLen) pszBuf++;
 		}
@@ -1527,7 +1598,7 @@ DWORD FileReadLine(HANDLE hFile, char *pszBuf, DWORD dwBufLen)
 	return dwCount;
 }
 
-DWORD SplitTokens(char *pszIn)
+DWORD SplitTokens(wchar_t *pszIn)
 {
 // Processes a string into a null-separated list of its tokens. A quoted
 // substring will be treated as a single token. Backslashes may be used to
@@ -1535,23 +1606,23 @@ DWORD SplitTokens(char *pszIn)
 // Returns the number of tokens split from the string.
 
 	DWORD dwCount=0;
-	char *pszOut;
+	wchar_t *pszOut;
 
 	pszOut=pszIn;
-	while (*pszIn==' ' || *pszIn=='\t') pszIn++;
+	while (*pszIn==L' ' || *pszIn==L'\t') pszIn++;
 	while (*pszIn) {
 		dwCount++;
-		if (*pszIn=='"') {
+		if (*pszIn==L'"') {
 			pszIn++;
 			for (;;pszOut++,pszIn++) {
-				if (*pszIn=='\\') {
+				if (*pszIn==L'\\') {
 					pszIn++;
-					if (*pszIn=='n') *pszIn='\n';
-					else if (*pszIn=='r') *pszIn='\r';
-					else if (*pszIn=='t') *pszIn='\t';
+					if (*pszIn==L'n') *pszIn=L'\n';
+					else if (*pszIn==L'r') *pszIn=L'\r';
+					else if (*pszIn==L't') *pszIn=L'\t';
 					*pszOut=*pszIn;
 					continue;
-				} else if (!*pszIn || *pszIn=='"') {
+				} else if (!*pszIn || *pszIn==L'"') {
 					break;
 				} else {
 					*pszOut=*pszIn;
@@ -1563,9 +1634,9 @@ DWORD SplitTokens(char *pszIn)
 				*pszOut=*pszIn;
 				pszOut++;
 				pszIn++;
-			} while (*pszIn && *pszIn!=' ' && *pszIn!='\t');
+			} while (*pszIn && *pszIn!=L' ' && *pszIn!=L'\t');
 		}
-		while (*pszIn==' ' || *pszIn=='\t') pszIn++;
+		while (*pszIn==L' ' || *pszIn==L'\t') pszIn++;
 		*pszOut=0;
 		pszOut++;
 	}
@@ -1573,14 +1644,14 @@ DWORD SplitTokens(char *pszIn)
 	return dwCount;
 }
 
-const char *GetToken(const char *pszTokens, DWORD dwToken) {
+const wchar_t *GetToken(const wchar_t *pszTokens, DWORD dwToken) {
 // Returns a pointer to the one-based dwToken'th null-separated token in
 // pszTokens.
 
 	DWORD dw;
 
 	for (dw=1;dw<dwToken;dw++,pszTokens++) {
-		pszTokens+=strlen(pszTokens);
+		pszTokens+=wcslen(pszTokens);
 	}
 	return pszTokens;
 }
@@ -1597,7 +1668,7 @@ DWORD GetIPAddressType(IN_ADDR ia)
 	}
 }
 
-inline bool CanUserLogin(const char *pszUser, IN_ADDR iaPeer)
+inline bool CanUserLogin(const wchar_t *pszUser, IN_ADDR iaPeer)
 {
 	return (dwActiveConnections < dwMaxConnections);
 }

@@ -45,18 +45,18 @@ class PermDB
 {
 private:
 	struct FTPPERM {
-		string strVirtual;
+		wstring strVirtual;
 		DWORD dwPerms[4];
 	};
 
 	tree<FTPPERM> _root;
 
-	static DWORD GetPermFunc(const char *pszVirtual, DWORD dwPermId, tree<FTPPERM> *ptree);
+	static DWORD GetPermFunc(const wchar_t *pszVirtual, DWORD dwPermId, tree<FTPPERM> *ptree);
 
 public:
 	PermDB();
-	void SetPerm(const char *pszVirtual, DWORD dwPermId, DWORD dwStatus);
-	DWORD GetPerm(const char *pszVirtual, DWORD dwPermId);
+	void SetPerm(const wchar_t *pszVirtual, DWORD dwPermId, DWORD dwStatus);
+	DWORD GetPerm(const wchar_t *pszVirtual, DWORD dwPermId);
 };
 
 #endif

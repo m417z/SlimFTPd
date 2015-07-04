@@ -39,19 +39,19 @@ PermDB::PermDB()
 	_root._data.dwPerms[PERM_ADMIN] = 0;
 }
 
-void PermDB::SetPerm(const char *pszVirtual, DWORD dwPermId, DWORD dwStatus)
+void PermDB::SetPerm(const wchar_t *pszVirtual, DWORD dwPermId, DWORD dwStatus)
 {
 	tree<FTPPERM> *ptree, *pparent;
-	char sz[512], *psz, *pszCut;
+	wchar_t sz[512], *psz, *pszCut;
 
 	ptree = &_root;
-	strcpy_s(sz, pszVirtual + 1);
+	wcscpy_s(sz, pszVirtual + 1);
 	psz = sz;
 	while (*psz) {
-		if (pszCut = strchr(psz, '/')) *pszCut = 0;
+		if (pszCut = wcschr(psz, L'/')) *pszCut = 0;
 		pparent = ptree;
 		ptree = ptree->_pdown;
-		while (ptree && _stricmp(ptree->_data.strVirtual.c_str(), psz)) ptree = ptree->_pright;
+		while (ptree && _wcsicmp(ptree->_data.strVirtual.c_str(), psz)) ptree = ptree->_pright;
 		if (!ptree) {
 			ptree=new tree<FTPPERM>(pparent);
 			ptree->_data.strVirtual = psz;
@@ -67,22 +67,22 @@ void PermDB::SetPerm(const char *pszVirtual, DWORD dwPermId, DWORD dwStatus)
 	ptree->_data.dwPerms[dwPermId] = dwStatus;
 }
 
-DWORD PermDB::GetPerm(const char *pszVirtual, DWORD dwPermId)
+DWORD PermDB::GetPerm(const wchar_t *pszVirtual, DWORD dwPermId)
 {
 	return GetPermFunc(pszVirtual, dwPermId, &_root);
 }
 
-DWORD PermDB::GetPermFunc(const char *pszVirtual, DWORD dwPermId, tree<FTPPERM> *ptree)
+DWORD PermDB::GetPermFunc(const wchar_t *pszVirtual, DWORD dwPermId, tree<FTPPERM> *ptree)
 {
-	const char *psz;
+	const wchar_t *psz;
 	DWORD dw;
 	UINT_PTR dwLen;
 
-	psz = strchr(pszVirtual, '/');
+	psz = wcschr(pszVirtual, L'/');
 	if (psz) dwLen = psz - pszVirtual;
-	else dwLen = strlen(pszVirtual);
+	else dwLen = wcslen(pszVirtual);
 	while (ptree) {
-		if ((ptree->_data.strVirtual.length() == dwLen) && (!dwLen || !_strnicmp(pszVirtual, ptree->_data.strVirtual.c_str(), dwLen))) {
+		if ((ptree->_data.strVirtual.length() == dwLen) && (!dwLen || !_wcsnicmp(pszVirtual, ptree->_data.strVirtual.c_str(), dwLen))) {
 			if (psz) {
 				dw = GetPermFunc(psz + 1, dwPermId, ptree->_pdown);
 				if (dw != -1) return dw;

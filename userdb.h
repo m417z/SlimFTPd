@@ -39,19 +39,19 @@
 class UserDB {
 private:
 	struct USERDBRECORD {
-		string strPassword;
+		wstring strPassword;
 		VFS vfs;
 		PermDB perms;
 	};
-	typedef std::map<string, USERDBRECORD> map_type;
+	typedef std::map<wstring, USERDBRECORD> map_type;
 	map_type _users;
 
 public:
-	bool Add(const char *pszUsername);
-	bool SetPassword(const char *pszUsername, const char *pszPassword);
-	VFS *GetVFS(const char *pszUsername);
-	PermDB *GetPermDB(const char *pszUsername);
-	bool CheckPassword(const char *pszUsername, const char *pszPassword);
+	bool Add(const wchar_t *pszUsername);
+	bool SetPassword(const wchar_t *pszUsername, const wchar_t *pszPassword);
+	VFS *GetVFS(const wchar_t *pszUsername);
+	PermDB *GetPermDB(const wchar_t *pszUsername);
+	bool CheckPassword(const wchar_t *pszUsername, const wchar_t *pszPassword);
 };
 
 #endif
