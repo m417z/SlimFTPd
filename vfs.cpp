@@ -355,7 +355,7 @@ void VFS::GetMountPointFindData(tree<MOUNTPOINT> *ptree, WIN32_FIND_DATA *pw32fd
 		pw32fd->dwFileAttributes = FILE_ATTRIBUTE_DIRECTORY;
 		SystemTimeToFileTime(&st, &pw32fd->ftLastWriteTime);
 	}
-	wcscpy_s(pw32fd->cFileName, sizeof(pw32fd->cFileName), ptree->_data.strVirtual.c_str());
+	wcscpy_s(pw32fd->cFileName, sizeof(pw32fd->cFileName)/sizeof(wchar_t), ptree->_data.strVirtual.c_str());
 }
 
 HANDLE VFS::CreateFile(const wchar_t *pszVirtual, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition)
