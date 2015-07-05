@@ -42,11 +42,22 @@ using namespace std;
 
 #define SERVERID L"SlimFTPd 3.181, by WhitSoft Development (www.whitsoftdev.com)"
 #define PACKET_SIZE 1452
-#define IP_ADDRESS_TYPE_LAN 1
-#define IP_ADDRESS_TYPE_WAN 2
-#define IP_ADDRESS_TYPE_LOCAL 3
-#define SOCKET_FILE_IO_DIRECTION_SEND 1
-#define SOCKET_FILE_IO_DIRECTION_RECEIVE 2
+enum class IpAddressType {
+	LAN = 1,
+	WAN,
+	LOCAL
+};
+enum class SocketFileIODirection {
+	SEND = 1,
+	RECEIVE
+};
+enum class ReceiveStatus {
+	OK = 1,
+	NETWORK_ERROR,
+	TIMEOUT,
+	INVALID_DATA,
+	INSUFFICIENT_BUFFER
+};
 
 // Service functions {
 VOID WINAPI ServiceMain(DWORD, LPTSTR);
@@ -75,19 +86,19 @@ bool ConfSetPermission(DWORD dwMode, const wchar_t *pszUser, const wchar_t *pszV
 bool WINAPI ListenThread(LPVOID);
 bool WINAPI ConnectionThread(SOCKET);
 bool SocketSendString(SOCKET, const wchar_t *);
-DWORD SocketReceiveString(SOCKET, wchar_t *, DWORD);
-bool SocketReceiveLetter(SOCKET, wchar_t *);
-DWORD SocketReceiveData(SOCKET, char *, DWORD);
+ReceiveStatus SocketReceiveString(SOCKET, wchar_t *, DWORD, DWORD *);
+ReceiveStatus SocketReceiveLetter(SOCKET, wchar_t *, DWORD, DWORD *);
+ReceiveStatus SocketReceiveData(SOCKET, char *, DWORD, DWORD *);
 SOCKET EstablishDataConnection(SOCKADDR_IN *, SOCKET *);
 void LookupHost(IN_ADDR ia, char *pszHostName, size_t stHostName);
-bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, DWORD *pdwAbortFlag);
+bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirection direction, DWORD *pdwAbortFlag);
 // }
 
 // Miscellaneous support functions {
 DWORD FileReadLine(HANDLE, wchar_t *, DWORD);
 DWORD SplitTokens(wchar_t *);
 const wchar_t * GetToken(const wchar_t *, DWORD);
-DWORD GetIPAddressType(IN_ADDR ia);
+IpAddressType GetIPAddressType(IN_ADDR ia);
 bool CanUserLogin(const wchar_t *pszUser, IN_ADDR iaPeer);
 // }
 
@@ -110,7 +121,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR pszCmdL
 	SERVICE_TABLE_ENTRY ste[]={ { L"SlimFTPd", (LPSERVICE_MAIN_FUNCTION)ServiceMain }, { 0, 0 } };
 	MSG msg;
 
-	hInst = GetModuleHandle(0);
+	hInst = hInstance;
 
 	// Are we starting as a service?
 	if (wcsstr(pszCmdLine, L"-service") != 0) {
@@ -464,7 +475,7 @@ bool ConfSetBindInterface(const wchar_t *pszArg, DWORD dwLine)
 		phe=gethostbyname(sz);
 		if (phe) {
 			for (dw=0;phe->h_addr_list[dw];dw++) {
-				if (GetIPAddressType(*(IN_ADDR*)phe->h_addr_list[dw]) == IP_ADDRESS_TYPE_LAN) {
+				if (GetIPAddressType(*(IN_ADDR*)phe->h_addr_list[dw]) == IpAddressType::LAN) {
 					saiListen.sin_addr.S_un.S_addr=((IN_ADDR*)phe->h_addr_list[dw])->S_un.S_addr;
 					break;
 				}
@@ -480,7 +491,7 @@ bool ConfSetBindInterface(const wchar_t *pszArg, DWORD dwLine)
 		phe=gethostbyname(sz);
 		if (phe) {
 			for (dw=0;phe->h_addr_list[dw];dw++) {
-				if (GetIPAddressType(*(IN_ADDR*)phe->h_addr_list[dw]) == IP_ADDRESS_TYPE_WAN) {
+				if (GetIPAddressType(*(IN_ADDR*)phe->h_addr_list[dw]) == IpAddressType::WAN) {
 					saiListen.sin_addr.S_un.S_addr=((IN_ADDR*)phe->h_addr_list[dw])->S_un.S_addr;
 					break;
 				}
@@ -698,6 +709,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 	wchar_t szOutput[1024], szCmd[512], *pszParam;
 	wstring strUser, strCurrentVirtual, strNewVirtual, strRnFr;
 	DWORD dw, dwRestOffset=0;
+	ReceiveStatus status;
 	bool isLoggedIn = false;
 	HANDLE hFile;
 	SYSTEMTIME st;
@@ -729,13 +741,18 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 	// Command processing loop
 	for (;;) {
 
-		dw=SocketReceiveString(sCmd,szCmd,511);
+		status=SocketReceiveString(sCmd,szCmd,512,&dw);
 
-		if (dw==-1) {
-			// Connection dropped or timed out
+		if (status==ReceiveStatus::NETWORK_ERROR) {
+			SocketSendString(sCmd,L"421 Network error.\r\n");
+			break;
+		} else if (status==ReceiveStatus::TIMEOUT) {
 			SocketSendString(sCmd,L"421 Connection timed out.\r\n");
 			break;
-		} else if (dw>511) {
+		} else if (status==ReceiveStatus::INVALID_DATA) {
+			SocketSendString(sCmd,L"500 Malformed request.\r\n");
+			continue;
+		} else if (status==ReceiveStatus::INSUFFICIENT_BUFFER) {
 			SocketSendString(sCmd,L"500 Command line too long.\r\n");
 			continue;
 		}
@@ -1034,7 +1051,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 						if (sData!=INVALID_SOCKET) {
 							swprintf_s(szOutput, L"[%u] User \"%s\" began downloading \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 							pLog->Log(szOutput);
-							if (DoSocketFileIO(sCmd, sData, hFile, SOCKET_FILE_IO_DIRECTION_SEND, &dw)) {
+							if (DoSocketFileIO(sCmd, sData, hFile, SocketFileIODirection::SEND, &dw)) {
 								swprintf_s(szOutput, L"226 \"%s\" transferred successfully.\r\n", strNewVirtual.c_str());
 								SocketSendString(sCmd, szOutput);
 								swprintf_s(szOutput, L"[%u] Download completed.", sCmd);
@@ -1085,7 +1102,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 						if (sData!=INVALID_SOCKET) {
 							swprintf_s(szOutput, L"[%u] User \"%s\" began uploading \"%s\".", sCmd, strUser.c_str(), strNewVirtual.c_str());
 							pLog->Log(szOutput);
-							if (DoSocketFileIO(sCmd, sData, hFile, SOCKET_FILE_IO_DIRECTION_RECEIVE, 0)) {
+							if (DoSocketFileIO(sCmd, sData, hFile, SocketFileIODirection::RECEIVE, 0)) {
 								swprintf_s(szOutput, L"226 \"%s\" transferred successfully.\r\n", strNewVirtual.c_str());
 								SocketSendString(sCmd, szOutput);
 								swprintf_s(szOutput, L"[%u] Upload completed.", sCmd);
@@ -1377,31 +1394,60 @@ bool SocketSendString(SOCKET s, const wchar_t *psz)
 
 	buf = new char[nUtf8Size];
 	nUtf8Size = WideCharToMultiByte(CP_UTF8, 0, psz, nWideSize, buf, nUtf8Size, NULL, NULL);
-	if(nUtf8Size != 0) {
+	if (nUtf8Size != 0) {
 		bSuccess = send(s, buf, nUtf8Size, 0)!=SOCKET_ERROR;
 	}
 	delete[] buf;
 	return bSuccess;
 }
 
-DWORD SocketReceiveString(SOCKET s, wchar_t *psz, DWORD dwMaxChars)
+ReceiveStatus SocketReceiveString(SOCKET s, wchar_t *psz, DWORD dwMaxChars, DWORD *pdwCharsReceived)
 {
-	DWORD dwChars;
+	DWORD dwChars = 0;
+	ReceiveStatus status, statusError;
+	wchar_t buf[2];
+	DWORD dw;
 
-	for (dwChars=0;;dwChars++) {
-		if(!SocketReceiveLetter(s, psz)) {
-			return -1; // Timeout or network error
+	for (;;) {
+		if (dwChars==dwMaxChars) {
+			statusError = ReceiveStatus::INSUFFICIENT_BUFFER;
+			break;
 		}
-		if (*psz=='\r') *psz=0;
-		else if (*psz=='\n') {
-			*psz=0;
-			return dwChars;
+
+		status = SocketReceiveLetter(s, psz, dwMaxChars-dwChars, &dw);
+		if (status == ReceiveStatus::OK) {
+			dwChars += dw;
+			if (*psz==L'\r') *psz=0;
+			else if (*psz==L'\n') {
+				*psz=0;
+				*pdwCharsReceived=dwChars;
+				return ReceiveStatus::OK;
+			}
+			psz += dw;
+		} else if (status == ReceiveStatus::INVALID_DATA || status == ReceiveStatus::INSUFFICIENT_BUFFER) {
+			statusError = status;
+			break;
+		} else {
+			return status;
 		}
-		if (dwChars<dwMaxChars) psz++;
+	}
+
+	// A non-critical error occurred, read until end of line
+	for (;;) {
+		status = SocketReceiveLetter(s, buf, sizeof(buf)/sizeof(wchar_t), &dw);
+		if (status == ReceiveStatus::OK) {
+			if (*buf==L'\n') {
+				return statusError;
+			}
+		} else if (status == ReceiveStatus::INVALID_DATA || status == ReceiveStatus::INSUFFICIENT_BUFFER) {
+			// Go on...
+		} else {
+			return status;
+		}
 	}
 }
 
-bool SocketReceiveLetter(SOCKET s, wchar_t *pch)
+ReceiveStatus SocketReceiveLetter(SOCKET s, wchar_t *pch, DWORD dwMaxChars, DWORD *pdwCharsReceived)
 {
 	char buf[4];
 	DWORD dwCharLength;
@@ -1414,10 +1460,9 @@ bool SocketReceiveLetter(SOCKET s, wchar_t *pch)
 	FD_ZERO(&fds);
 	FD_SET(s, &fds);
 	dw = select(0, &fds, 0, 0, &tv);
-	if (dw == SOCKET_ERROR || dw == 0) return false; // Timeout
-
+	if (dw == SOCKET_ERROR || dw == 0) return ReceiveStatus::TIMEOUT;
 	dw = recv(s, &buf[0], 1, 0);
-	if (dw == SOCKET_ERROR || dw == 0) return false; // Network error
+	if (dw == SOCKET_ERROR || dw == 0) return ReceiveStatus::NETWORK_ERROR;
 
 	if ((buf[0] & 0x80) == 0x00) { // 0xxxxxxx
 		dwCharLength = 1;
@@ -1428,30 +1473,32 @@ bool SocketReceiveLetter(SOCKET s, wchar_t *pch)
 	} else if ((buf[0] & 0xF8) == 0xF0) { // 11110xxx
 		dwCharLength = 4;
 	} else {
-		// The input is invalid
-		dwCharLength = 0;
+		return ReceiveStatus::INVALID_DATA;
 	}
 
 	if (dwCharLength > 1) {
 		dw = recv(s, &buf[1], dwCharLength-1, 0);
-		if (dw == SOCKET_ERROR || dw == 0) return false; // Network error
+		if (dw == SOCKET_ERROR || dw == 0) return ReceiveStatus::NETWORK_ERROR;
 	}
 
-	if (dwCharLength > 0) {
-		if (MultiByteToWideChar(CP_UTF8, 0, buf, dwCharLength, pch, 1) != 1) {
-			dwCharLength = 0;
+	if (dwMaxChars == 0) {
+		return ReceiveStatus::INSUFFICIENT_BUFFER;
+	}
+
+	dw = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, buf, dwCharLength, pch, dwMaxChars);
+	if (dw == 0) {
+		if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+			return ReceiveStatus::INSUFFICIENT_BUFFER;
+		} else {
+			return ReceiveStatus::INVALID_DATA;
 		}
 	}
 
-	if (dwCharLength == 0) {
-		// The input byte sequence is invalid, return REPLACEMENT CHARACTER (U+FFFD)
-		*pch = 0xFFFD;
-	}
-
-	return true;
+	*pdwCharsReceived = dw;
+	return ReceiveStatus::OK;
 }
 
-DWORD SocketReceiveData(SOCKET s, char *psz, DWORD dwBytesToRead)
+ReceiveStatus SocketReceiveData(SOCKET s, char *psz, DWORD dwBytesToRead, DWORD *pdwBytesRead)
 {
 	DWORD dw;
 	TIMEVAL tv;
@@ -1462,10 +1509,11 @@ DWORD SocketReceiveData(SOCKET s, char *psz, DWORD dwBytesToRead)
 	FD_ZERO(&fds);
 	FD_SET(s,&fds);
 	dw=select(0,&fds,0,0,&tv);
-	if (dw==SOCKET_ERROR || dw==0) return -1; // Timeout
+	if (dw==SOCKET_ERROR || dw==0) return ReceiveStatus::TIMEOUT;
 	dw=recv(s,psz,dwBytesToRead,0);
-	if (dw==SOCKET_ERROR) return -1; // Network error
-	return dw;
+	if (dw==SOCKET_ERROR) return ReceiveStatus::NETWORK_ERROR;
+	*pdwBytesRead=dw;
+	return ReceiveStatus::OK;
 }
 
 SOCKET EstablishDataConnection(SOCKADDR_IN *psaiData, SOCKET *psPasv)
@@ -1517,23 +1565,22 @@ void LookupHost(IN_ADDR ia, char *pszHostName, size_t stHostName)
 	}
 }
 
-bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, DWORD *pdwAbortFlag)
+bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirection direction, DWORD *pdwAbortFlag)
 {
 	char szBuffer[PACKET_SIZE];
 	wchar_t szCmd[512];
 	DWORD dw;
 
 	if (pdwAbortFlag) *pdwAbortFlag = 0;
-	switch (dwDirection) {
-	case SOCKET_FILE_IO_DIRECTION_SEND:
+	switch (direction) {
+	case SocketFileIODirection::SEND:
 		for (;;) {
 			if (!ReadFile(hFile, szBuffer, PACKET_SIZE, &dw, 0)) return false;
 			if (!dw) return true;
 			if (send(sData, szBuffer, dw, 0) == SOCKET_ERROR) return false;
 			ioctlsocket(sCmd, FIONREAD, &dw);
 			if (dw) {
-				dw = SocketReceiveString(sCmd, szCmd, 511);
-				if (dw != -1 && dw <= 511) {
+				if (SocketReceiveString(sCmd, szCmd, 512, &dw) == ReceiveStatus::OK) {
 					if (!_wcsicmp(szCmd, L"ABOR")) {
 						*pdwAbortFlag = 1;
 						return false;
@@ -1544,10 +1591,9 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, DWORD dwDirection, 
 			}
 		}
 		break;
-	case SOCKET_FILE_IO_DIRECTION_RECEIVE:
+	case SocketFileIODirection::RECEIVE:
 		for (;;) {
-			dw = SocketReceiveData(sData, szBuffer, PACKET_SIZE);
-			if (dw == -1) return false;
+			if (SocketReceiveData(sData, szBuffer, PACKET_SIZE, &dw) != ReceiveStatus::OK) return false;
 			if (dw == 0) return true;
 			if (!WriteFile(hFile, szBuffer, dw, &dw, 0)) return false;
 		}
@@ -1640,15 +1686,15 @@ const wchar_t *GetToken(const wchar_t *pszTokens, DWORD dwToken) {
 	return pszTokens;
 }
 
-DWORD GetIPAddressType(IN_ADDR ia)
+IpAddressType GetIPAddressType(IN_ADDR ia)
 // Returns one of the predefined IP address types, according to ia.
 {
 	if (((ia.S_un.S_un_b.s_b1 == 192) && (ia.S_un.S_un_b.s_b2 == 168)) || ((ia.S_un.S_un_b.s_b1 == 169) && (ia.S_un.S_un_b.s_b2 == 254)) || (ia.S_un.S_un_b.s_b1 == 10)) {
-		return IP_ADDRESS_TYPE_LAN;
+		return IpAddressType::LAN;
 	} else if ((ia.S_un.S_un_b.s_b1 == 127) && (ia.S_un.S_un_b.s_b2 == 0) && (ia.S_un.S_un_b.s_b3 == 0) && (ia.S_un.S_un_b.s_b4 == 1)) {
-		return IP_ADDRESS_TYPE_LOCAL;
+		return IpAddressType::LOCAL;
 	} else {
-		return IP_ADDRESS_TYPE_WAN;
+		return IpAddressType::WAN;
 	}
 }
 
