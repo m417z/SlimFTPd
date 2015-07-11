@@ -95,6 +95,7 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirecti
 // }
 
 // Miscellaneous support functions {
+bool FileSkipBOM(HANDLE hFile);
 DWORD FileReadLine(HANDLE, wchar_t *, DWORD);
 DWORD SplitTokens(wchar_t *);
 const wchar_t * GetToken(const wchar_t *, DWORD);
@@ -280,6 +281,8 @@ bool ConfParseScript(const wchar_t *pszFileName)
 		pLog->Log(L"Unable to open \"SlimFTPd.conf\".");
 		return false;
 	}
+
+	FileSkipBOM(hFile);
 
 	for (dwLine=1;;dwLine++) {
 		dwLen=FileReadLine(hFile, sz, 512);
@@ -1601,6 +1604,29 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirecti
 	default:
 		return false;
 	}
+}
+
+bool FileSkipBOM(HANDLE hFile)
+{
+	DWORD dw, dwBytesRead;
+	wchar_t chBOM;
+
+	if (SetFilePointer(hFile, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
+		return false;
+	}
+
+	dw = ReadFile(hFile, &chBOM, sizeof(wchar_t), &dwBytesRead, 0);
+	if (!dw) {
+		return false;
+	}
+
+	if (dwBytesRead > 0) {
+		if (dwBytesRead < sizeof(wchar_t) || chBOM!=0xFEFF) {
+			SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+		}
+	}
+
+	return true;
 }
 
 DWORD FileReadLine(HANDLE hFile, wchar_t *pszBuf, DWORD dwBufLen)
