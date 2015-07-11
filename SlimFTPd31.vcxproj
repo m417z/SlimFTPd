@@ -63,7 +63,6 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>ws2_32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>$(OutDir)SlimFTPd31.exe</OutputFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>$(OutDir)SlimFTPd31.pdb</ProgramDatabaseFile>
       <SubSystem>Windows</SubSystem>
@@ -83,7 +82,6 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>ws2_32.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>$(OutDir)SlimFTPd.exe</OutputFile>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
