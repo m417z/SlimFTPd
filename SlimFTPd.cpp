@@ -31,6 +31,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <shlwapi.h>
+#include <process.h>
 #include <algorithm>
 #include "permdb.h"
 #include "synclogger.h"
@@ -83,8 +84,8 @@ bool ConfSetPermission(DWORD dwMode, const wchar_t *pszUser, const wchar_t *pszV
 // }
 
 // Network functions {
-bool WINAPI ListenThread(LPVOID);
-bool WINAPI ConnectionThread(SOCKET);
+void __cdecl ListenThread(void *);
+void __cdecl ConnectionThread(void *);
 bool SocketSendString(SOCKET, const wchar_t *);
 ReceiveStatus SocketReceiveString(SOCKET, wchar_t *, DWORD, DWORD *);
 ReceiveStatus SocketReceiveLetter(SOCKET, wchar_t *, DWORD, DWORD *);
@@ -191,7 +192,6 @@ bool Startup()
 {
 	WSADATA wsad;
 	wchar_t szLogFile[512], szConfFile[512];
-	DWORD dw;
 
 	// Construct log and config filenames
 	GetModuleFileName(0,szLogFile,ARRAYSIZE(szLogFile));
@@ -234,7 +234,7 @@ bool Startup()
 	listen(sListen,SOMAXCONN);
 
 	// Launch the listen thread
-	CloseHandle(CreateThread(0,0,(LPTHREAD_START_ROUTINE)ListenThread,0,0,&dw));
+	_beginthread(ListenThread,0,NULL);
 
 	return true;
 }
@@ -687,25 +687,23 @@ bool ConfSetPermission(DWORD dwMode, const wchar_t *pszUser, const wchar_t *pszV
 	return true;
 }
 
-bool WINAPI ListenThread(LPVOID lParam)
+void __cdecl ListenThread(void *)
 {
 	SOCKET sIncoming;
-	DWORD dw;
 
 	pLog->Log(L"Waiting for incoming connections...");
 
 	// Accept incoming connections and pass them to connection threads
 	while ((sIncoming=accept(sListen,0,0))!=INVALID_SOCKET) {
-		CloseHandle(CreateThread(0,0,(LPTHREAD_START_ROUTINE)ConnectionThread,(void *)sIncoming,0,&dw));
+		_beginthread(ConnectionThread,0,(void *)sIncoming);
 	}
 
 	closesocket(sListen);
-
-	return false;
 }
 
-bool WINAPI ConnectionThread(SOCKET sCmd)
+void __cdecl ConnectionThread(void *pParam)
 {
+	SOCKET sCmd = (SOCKET)pParam;
 	SOCKET sData=0, sPasv=0;
 	SOCKADDR_IN saiCmd, saiCmdPeer, saiData, saiPasv;
 	wchar_t szPeerName[64], szOutput[1024], szCmd[512], *pszParam;
@@ -1380,8 +1378,6 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 
 	swprintf_s(szOutput,L"[%u] Connection closed.",sCmd);
 	pLog->Log(szOutput);
-
-	return false;
 }
 
 bool SocketSendString(SOCKET s, const wchar_t *psz)

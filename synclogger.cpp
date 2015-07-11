@@ -28,13 +28,14 @@
  */
 
 #include "synclogger.h"
+#include <process.h>
 
 SyncLogger::SyncLogger(const wchar_t *pszFilename)
 {
 	_hLogFile=CreateFile(pszFilename,GENERIC_WRITE,FILE_SHARE_READ,0,OPEN_ALWAYS,0,0);
 	if (_hLogFile!=INVALID_HANDLE_VALUE) {
 		SetFilePointer(_hLogFile,0,0,FILE_END);
-		_hLoggerThread=CreateThread(0,0,(LPTHREAD_START_ROUTINE)SyncLoggerThread,this,0,&_dwLoggerThreadId);
+		_hLoggerThread=(HANDLE)_beginthreadex(NULL,0,SyncLoggerThread,this,0,(unsigned int *)&_dwLoggerThreadId);
 	}
 }
 
@@ -69,8 +70,9 @@ void SyncLogger::Log(const wchar_t *pszText)
 	}
 }
 
-DWORD WINAPI SyncLogger::SyncLoggerThread(SyncLogger *pthis)
+unsigned __stdcall SyncLogger::SyncLoggerThread(void *pParam)
 {
+	SyncLogger *pthis = (SyncLogger *)pParam;
 	MSG msg;
 	DWORD dw;
 

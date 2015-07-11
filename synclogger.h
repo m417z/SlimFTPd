@@ -39,7 +39,7 @@ private:
 	HANDLE _hLoggerThread;
 	DWORD _dwLoggerThreadId;
 
-	static DWORD WINAPI SyncLoggerThread(SyncLogger *pthis);
+	static unsigned __stdcall SyncLoggerThread(void *pParam);
 
 public:
 	SyncLogger(const wchar_t *pszFilename);
