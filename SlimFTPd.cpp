@@ -194,7 +194,7 @@ bool Startup()
 	DWORD dw;
 
 	// Construct log and config filenames
-	GetModuleFileName(0,szLogFile,512);
+	GetModuleFileName(0,szLogFile,ARRAYSIZE(szLogFile));
 	*wcsrchr(szLogFile, L'\\') = 0;
 	wcscpy_s(szConfFile,szLogFile);
 	wcscat_s(szLogFile, L"\\SlimFTPd.log");
@@ -285,7 +285,7 @@ bool ConfParseScript(const wchar_t *pszFileName)
 	FileSkipBOM(hFile);
 
 	for (dwLine=1;;dwLine++) {
-		dwLen=FileReadLine(hFile, sz, 512);
+		dwLen=FileReadLine(hFile, sz, ARRAYSIZE(sz));
 		if (dwLen==-1) {
 			CloseHandle(hFile);
 			if (!strUser.empty()) {
@@ -474,7 +474,7 @@ bool ConfSetBindInterface(const wchar_t *pszArg, DWORD dwLine)
 		saiListen.sin_addr.S_un.S_addr=htonl(INADDR_LOOPBACK);
 	} else if (!_wcsicmp(pszArg,L"LAN")) {
 		saiListen.sin_addr.S_un.S_addr=INADDR_NONE;
-		gethostname(sz,512);
+		gethostname(sz,ARRAYSIZE(sz));
 		phe=gethostbyname(sz);
 		if (phe) {
 			for (dw=0;phe->h_addr_list[dw];dw++) {
@@ -490,7 +490,7 @@ bool ConfSetBindInterface(const wchar_t *pszArg, DWORD dwLine)
 		}
 	} else if (!_wcsicmp(pszArg,L"WAN")) {
 		saiListen.sin_addr.S_un.S_addr=INADDR_NONE;
-		gethostname(sz,512);
+		gethostname(sz,ARRAYSIZE(sz));
 		phe=gethostbyname(sz);
 		if (phe) {
 			for (dw=0;phe->h_addr_list[dw];dw++) {
@@ -726,7 +726,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 	// Get peer address
 	dw=sizeof(SOCKADDR_IN);
 	getpeername(sCmd, (SOCKADDR *)&saiCmdPeer, (int *)&dw);
-	LookupHost(&saiCmdPeer, szPeerName, 64);
+	LookupHost(&saiCmdPeer, szPeerName, ARRAYSIZE(szPeerName));
 
 	// Log incoming connection
 	swprintf_s(szOutput, L"[%u] Incoming connection from %s:%u.", sCmd, szPeerName, ntohs(saiCmdPeer.sin_port));
@@ -743,7 +743,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 	// Command processing loop
 	for (;;) {
 
-		status=SocketReceiveString(sCmd,szCmd,512,&dw);
+		status=SocketReceiveString(sCmd,szCmd,ARRAYSIZE(szCmd),&dw);
 
 		if (status==ReceiveStatus::NETWORK_ERROR) {
 			SocketSendString(sCmd,L"421 Network error.\r\n");
@@ -1587,7 +1587,7 @@ bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirecti
 			if (send(sData, szBuffer, dw, 0) == SOCKET_ERROR) return false;
 			ioctlsocket(sCmd, FIONREAD, &dw);
 			if (dw) {
-				if (SocketReceiveString(sCmd, szCmd, 512, &dw) == ReceiveStatus::OK) {
+				if (SocketReceiveString(sCmd, szCmd, ARRAYSIZE(szCmd), &dw) == ReceiveStatus::OK) {
 					if (!_wcsicmp(szCmd, L"ABOR")) {
 						*pdwAbortFlag = 1;
 						return false;
