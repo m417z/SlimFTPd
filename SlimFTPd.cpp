@@ -90,7 +90,7 @@ ReceiveStatus SocketReceiveString(SOCKET, wchar_t *, DWORD, DWORD *);
 ReceiveStatus SocketReceiveLetter(SOCKET, wchar_t *, DWORD, DWORD *);
 ReceiveStatus SocketReceiveData(SOCKET, char *, DWORD, DWORD *);
 SOCKET EstablishDataConnection(SOCKADDR_IN *, SOCKET *);
-void LookupHost(IN_ADDR ia, char *pszHostName, size_t stHostName);
+void LookupHost(const SOCKADDR_IN *sai, wchar_t *pszHostName, size_t stHostName);
 bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirection direction, DWORD *pdwAbortFlag);
 // }
 
@@ -708,8 +708,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 {
 	SOCKET sData=0, sPasv=0;
 	SOCKADDR_IN saiCmd, saiCmdPeer, saiData, saiPasv;
-	char szPeerName[64];
-	wchar_t szOutput[1024], szCmd[512], *pszParam;
+	wchar_t szPeerName[64], szOutput[1024], szCmd[512], *pszParam;
 	wstring strUser, strCurrentVirtual, strNewVirtual, strRnFr;
 	DWORD dw, dwRestOffset=0;
 	ReceiveStatus status;
@@ -727,14 +726,14 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 	// Get peer address
 	dw=sizeof(SOCKADDR_IN);
 	getpeername(sCmd, (SOCKADDR *)&saiCmdPeer, (int *)&dw);
-	LookupHost(saiCmdPeer.sin_addr, szPeerName, 64);
+	LookupHost(&saiCmdPeer, szPeerName, 64);
 
 	// Log incoming connection
-	swprintf_s(szOutput, L"[%u] Incoming connection from %S:%u.", sCmd, szPeerName, ntohs(saiCmdPeer.sin_port));
+	swprintf_s(szOutput, L"[%u] Incoming connection from %s:%u.", sCmd, szPeerName, ntohs(saiCmdPeer.sin_port));
 	pLog->Log(szOutput);
 
 	// Send greeting
-	swprintf_s(szOutput, L"220-%s\r\n220-You are connecting from %S:%u.\r\n220 Proceed with login.\r\n", SERVERID, szPeerName, ntohs(saiCmdPeer.sin_port));
+	swprintf_s(szOutput, L"220-%s\r\n220-You are connecting from %s:%u.\r\n220 Proceed with login.\r\n", SERVERID, szPeerName, ntohs(saiCmdPeer.sin_port));
 	SocketSendString(sCmd, szOutput);
 
 	// Get host address
@@ -1552,20 +1551,25 @@ SOCKET EstablishDataConnection(SOCKADDR_IN *psaiData, SOCKET *psPasv)
 	}
 }
 
-void LookupHost(IN_ADDR ia, char *pszHostName, size_t stHostName)
+void LookupHost(const SOCKADDR_IN *sai, wchar_t *pszHostName, size_t stHostName)
 // Performs a reverse DNS lookup on ia. If no host name could be resolved, or
 // if LookupHosts is Off, pszHostName will contain a string representation of
 // the given IP address.
 {
-	HOSTENT *phe;
+	DWORD dw;
 
 	if (bLookupHosts) {
-		phe = gethostbyaddr((const char *)&ia, sizeof(IN_ADDR), AF_INET);
-		if (phe) strcpy_s(pszHostName, stHostName, phe->h_name);
+		if (GetNameInfo((SOCKADDR *)sai, sizeof(SOCKADDR_IN), pszHostName, stHostName, NULL, 0, 0) == 0) {
+			return;
+		}
 	}
-	if (!bLookupHosts || !phe) {
-		strcpy_s(pszHostName, stHostName, inet_ntoa(ia));
+
+	dw = stHostName;
+	if (WSAAddressToString((SOCKADDR *)sai, sizeof(SOCKADDR_IN), NULL, pszHostName, &dw) == 0) {
+		return;
 	}
+
+	wcscpy_s(pszHostName, stHostName, L"???");
 }
 
 bool DoSocketFileIO(SOCKET sCmd, SOCKET sData, HANDLE hFile, SocketFileIODirection direction, DWORD *pdwAbortFlag)
