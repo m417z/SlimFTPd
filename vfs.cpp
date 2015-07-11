@@ -339,7 +339,7 @@ bool VFS::IsFolder(const wchar_t *pszVirtual)
 	if (FindMountPoint(pszVirtual, &_root)) return true;
 	if (!Map(pszVirtual, strLocal, &_root)) return true;
 	dw = GetFileAttributes(strLocal.c_str());
-	return ((dw != -1) && (dw & FILE_ATTRIBUTE_DIRECTORY));
+	return ((dw != INVALID_FILE_ATTRIBUTES) && (dw & FILE_ATTRIBUTE_DIRECTORY));
 }
 
 void VFS::GetMountPointFindData(tree<MOUNTPOINT> *ptree, WIN32_FIND_DATA *pw32fd)

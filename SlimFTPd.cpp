@@ -628,7 +628,7 @@ bool ConfSetMountPoint(const wchar_t *pszUser, const wchar_t *pszVirtual, const 
 		if (*strLocal.rbegin() == L'\\') {
 			strLocal = strLocal.substr(0, strLocal.length() - 1);
 		}
-		if (GetFileAttributes(strLocal.c_str()) == -1) {
+		if (GetFileAttributes(strLocal.c_str()) == INVALID_FILE_ATTRIBUTES) {
 			LogConfError(L"Mount directive cannot find local path \"%s\".", dwLine, strLocal.c_str());
 			return false;
 		}
