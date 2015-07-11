@@ -36,7 +36,7 @@
 #include "synclogger.h"
 #include "userdb.h"
 #include "vfs.h"
-#include "tree.cpp"
+#include "tree.h"
 
 using namespace std;
 

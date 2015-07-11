@@ -29,7 +29,6 @@
 
 #include "permdb.h"
 #include "tree.h"
-#include "tree.cpp"
 
 PermDB::PermDB()
 {

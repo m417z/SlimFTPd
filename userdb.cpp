@@ -28,8 +28,7 @@
  */
 
 #include "userdb.h"
-
-#include "tree.cpp"
+#include "tree.h"
 
 bool UserDB::Add(const wchar_t *pszUsername)
 {

@@ -29,7 +29,7 @@
 
 #include "vfs.h"
 #include <algorithm>
-#include "tree.cpp"
+#include "tree.h"
 #define STRSAFE_NO_DEPRECATE
 #include <strsafe.h>
 
