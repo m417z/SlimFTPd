@@ -970,7 +970,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 					strNewVirtual = strCurrentVirtual;
 				}
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_LIST) == 1) {
-					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), wcscmp(szCmd, L"LIST"), listing)) {
+					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), _wcsicmp(szCmd, L"LIST"), listing)) {
 						swprintf_s(szOutput, L"150 Opening %s mode data connection for listing of \"%s\".\r\n", sPasv ? L"passive" : L"active", strNewVirtual.c_str());
 						SocketSendString(sCmd, szOutput);
 						sData = EstablishDataConnection(&saiData, &sPasv);
