@@ -1011,7 +1011,7 @@ bool WINAPI ConnectionThread(SOCKET sCmd)
 					strNewVirtual = strCurrentVirtual;
 				}
 				if (pPerms->GetPerm(strNewVirtual.c_str(), PERM_LIST) == 1) {
-					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), 1, listing)) {
+					if (pVFS->GetDirectoryListing(strNewVirtual.c_str(), 0, listing)) {
 						swprintf_s(szOutput, L"212-Sending directory listing of \"%s\".\r\n", strNewVirtual.c_str());
 						SocketSendString(sCmd,szOutput);
 						for (VFS::listing_type::const_iterator it = listing.begin(); it != listing.end(); ++it) {
