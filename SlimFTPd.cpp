@@ -100,7 +100,6 @@ DWORD FileReadLine(HANDLE, wchar_t *, DWORD);
 DWORD SplitTokens(wchar_t *);
 const wchar_t * GetToken(const wchar_t *, DWORD);
 IpAddressType GetIPAddressType(IN_ADDR ia);
-bool CanUserLogin(const wchar_t *pszUser, IN_ADDR iaPeer);
 // }
 
 // Global Variables {
@@ -110,7 +109,7 @@ SERVICE_STATUS ServiceStatus;
 bool isService;
 DWORD dwMaxConnections = 20, dwCommandTimeout = 300, dwConnectTimeout = 15;
 bool bLookupHosts = true;
-DWORD dwActiveConnections = 0;
+volatile DWORD dwActiveConnections = 0;
 SOCKET sListen;
 SOCKADDR_IN saiListen;
 UserDB *pUsers;
@@ -786,9 +785,8 @@ void __cdecl ConnectionThread(void *pParam)
 				SocketSendString(sCmd, L"503 Already logged in. Use REIN to change users.\r\n");
 			} else {
 				if (pUsers->CheckPassword(strUser.c_str(), pszParam)) {
-					if (CanUserLogin(strUser.c_str(), saiCmdPeer.sin_addr)) {
+					if (InterlockedIncrement(&dwActiveConnections) <= dwMaxConnections) {
 						isLoggedIn = true;
-						dwActiveConnections++;
 						strCurrentVirtual = L"/";
 						swprintf_s(szOutput, L"230 User \"%s\" logged in.\r\n", strUser.c_str());
 						SocketSendString(sCmd, szOutput);
@@ -797,6 +795,7 @@ void __cdecl ConnectionThread(void *pParam)
 						pVFS = pUsers->GetVFS(strUser.c_str());
 						pPerms = pUsers->GetPermDB(strUser.c_str());
 					} else {
+						InterlockedDecrement(&dwActiveConnections);
 						SocketSendString(sCmd, L"421 Your login was refused due to a server connection limit.\r\n");
 						swprintf_s(szOutput, L"[%u] Login for user \"%s\" refused due to connection limit.", sCmd, strUser.c_str());
 						pLog->Log(szOutput);
@@ -811,7 +810,7 @@ void __cdecl ConnectionThread(void *pParam)
 		else if (!_wcsicmp(szCmd, L"REIN")) {
 			if (isLoggedIn) {
 				isLoggedIn = false;
-				dwActiveConnections--;
+				InterlockedDecrement(&dwActiveConnections);
 				swprintf_s(szOutput, L"220-User \"%s\" logged out.\r\n", strUser.c_str());
 				SocketSendString(sCmd, szOutput);
 				swprintf_s(szOutput, L"[%u] User \"%s\" logged out.", sCmd, strUser.c_str());
@@ -837,7 +836,7 @@ void __cdecl ConnectionThread(void *pParam)
 		else if (!_wcsicmp(szCmd, L"QUIT")) {
 			if (isLoggedIn) {
 				isLoggedIn = false;
-				dwActiveConnections--;
+				InterlockedDecrement(&dwActiveConnections);
 				swprintf_s(szOutput, L"221-User \"%s\" logged out.\r\n", strUser.c_str());
 				SocketSendString(sCmd, szOutput);
 				swprintf_s(szOutput, L"[%u] User \"%s\" logged out.", sCmd, strUser.c_str());
@@ -1372,7 +1371,7 @@ void __cdecl ConnectionThread(void *pParam)
 	closesocket(sCmd);
 
 	if (isLoggedIn) {
-		dwActiveConnections--;
+		InterlockedDecrement(&dwActiveConnections);
 	}
 
 	swprintf_s(szOutput,L"[%u] Connection closed.",sCmd);
@@ -1721,9 +1720,4 @@ IpAddressType GetIPAddressType(IN_ADDR ia)
 	} else {
 		return IpAddressType::WAN;
 	}
-}
-
-inline bool CanUserLogin(const wchar_t *pszUser, IN_ADDR iaPeer)
-{
-	return (dwActiveConnections < dwMaxConnections);
 }
