@@ -75,7 +75,6 @@ bool ConfSetBindPort(const wchar_t *pszArg, DWORD dwLine);
 bool ConfSetMaxConnections(const wchar_t *pszArg, DWORD dwLine);
 bool ConfSetCommandTimeout(const wchar_t *pszArg, DWORD dwLine);
 bool ConfSetConnectTimeout(const wchar_t *pszArg, DWORD dwLine);
-bool ConfSetAdminPassword(const wchar_t *pszArg, DWORD dwLine);
 bool ConfSetLookupHosts(const wchar_t *pszArg, DWORD dwLine);
 bool ConfAddUser(const wchar_t *pszArg, DWORD dwLine);
 bool ConfSetUserPassword(const wchar_t *pszUser, const wchar_t *pszArg, DWORD dwLine);
