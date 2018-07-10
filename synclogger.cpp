@@ -36,6 +36,8 @@ SyncLogger::SyncLogger(const wchar_t *pszFilename)
 	if (_hLogFile!=INVALID_HANDLE_VALUE) {
 		SetFilePointer(_hLogFile,0,0,FILE_END);
 		_hLoggerThread=(HANDLE)_beginthreadex(NULL,0,SyncLoggerThread,this,0,(unsigned int *)&_dwLoggerThreadId);
+	} else {
+		_hLoggerThread=NULL;
 	}
 }
 
@@ -46,7 +48,7 @@ SyncLogger::~SyncLogger()
 		WaitForSingleObject(_hLoggerThread,INFINITE);
 		CloseHandle(_hLoggerThread);
 	}
-	if (_hLogFile) CloseHandle(_hLogFile);
+	if (_hLogFile!=INVALID_HANDLE_VALUE) CloseHandle(_hLogFile);
 }
 
 void SyncLogger::Log(const wchar_t *pszText)
@@ -54,7 +56,7 @@ void SyncLogger::Log(const wchar_t *pszText)
 	wchar_t *psz;
 	DWORD dwDateLen, dwTimeLen;
 
-	if (_hLogFile && _dwLoggerThreadId && pszText) {
+	if (_hLogFile!=INVALID_HANDLE_VALUE && _dwLoggerThreadId && pszText) {
 		dwDateLen=GetDateFormat(LOCALE_SYSTEM_DEFAULT,DATE_SHORTDATE,0,0,0,0);
 		dwTimeLen=GetTimeFormat(LOCALE_SYSTEM_DEFAULT,0,0,0,0,0);
 		size_t buflen = dwDateLen+dwTimeLen+wcslen(pszText)+5;
@@ -81,7 +83,8 @@ unsigned __stdcall SyncLogger::SyncLoggerThread(void *pParam)
 		switch (msg.message) {
 		case WM_USER:
 			WriteFile(pthis->_hLogFile, (wchar_t *)msg.lParam, (DWORD)wcslen((wchar_t *)msg.lParam)*sizeof(wchar_t), &dw, 0);
-			delete (wchar_t *)msg.lParam;
+			delete[] (wchar_t *)msg.lParam;
+			break;
 		}
 	}
 
